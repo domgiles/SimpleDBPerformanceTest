@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="simpledbtest" default="all">
+
+  <property file="build.properties"/>
+  
+  <path id="library.apache_commons.classpath">
+    <pathelement location="${basedir}/lib/commons-cli-1.4.jar"/>
+  </path>
+  
+  <path id="library.oracle_jdbc.classpath">
+    <pathelement location="${basedir}/lib/ojdbc8-19.3.0.0.jar"/>
+    <pathelement location="${basedir}/lib/ons-19.3.0.0.jar"/>
+    <pathelement location="${basedir}/lib/oraclepki-19.3.0.0.jar"/>
+    <pathelement location="${basedir}/lib/osdt_cert-19.3.0.0.jar"/>
+    <pathelement location="${basedir}/lib/osdt_core-19.3.0.0.jar"/>
+    <pathelement location="${basedir}/lib/simplefan-19.3.0.0.jar"/>
+    <pathelement location="${basedir}/lib/ucp-19.3.0.0.jar"/>
+  </path>
+  
+  <path id="library.postgresql_jdbc.classpath">
+    <pathelement location="${basedir}/lib/postgresql-42.2.14.jre7.jar"/>
+  </path>
+  
+  <dirname property="module.simpledbtest.basedir" file="${ant.file}"/>
+  
+  <property name="compiler.args.simpledbtest" value="-encoding UTF-8 -source 8 -target 8"/>
+  
+  <property name="simpledbtest.output.dir" value="${module.simpledbtest.basedir}/out/production/SimpleDBTest"/>
+  <property name="simpledbtest.testoutput.dir" value="${module.simpledbtest.basedir}/out/test/SimpleDBTest"/>
+  
+  <path id="simpledbtest.module.bootclasspath">
+    <!-- Paths to be included in compilation bootclasspath -->
+  </path>
+  
+  <path id="simpledbtest.module.production.classpath">
+    <path refid="library.apache_commons.classpath"/>
+    <path refid="library.oracle_jdbc.classpath"/>
+    <path refid="library.postgresql_jdbc.classpath"/>
+  </path>
+  
+  <path id="simpledbtest.runtime.production.module.classpath">
+    <pathelement location="${simpledbtest.output.dir}"/>
+    <path refid="library.apache_commons.classpath"/>
+    <path refid="library.oracle_jdbc.classpath"/>
+    <path refid="library.postgresql_jdbc.classpath"/>
+  </path>
+  
+  <path id="simpledbtest.module.classpath">
+    <pathelement location="${simpledbtest.output.dir}"/>
+    <path refid="library.apache_commons.classpath"/>
+    <path refid="library.oracle_jdbc.classpath"/>
+    <path refid="library.postgresql_jdbc.classpath"/>
+  </path>
+  
+  <path id="simpledbtest.runtime.module.classpath">
+    <pathelement location="${simpledbtest.testoutput.dir}"/>
+    <pathelement location="${simpledbtest.output.dir}"/>
+    <path refid="library.apache_commons.classpath"/>
+    <path refid="library.oracle_jdbc.classpath"/>
+    <path refid="library.postgresql_jdbc.classpath"/>
+  </path>
+
+  
+  <path id="simpledbtest.module.sourcepath">
+    <dirset dir="${module.simpledbtest.basedir}/../../java">
+      <include name="SimpleDBPerformanceTest/src"/>
+    </dirset>
+  </path>
+  
+  <path id="simpledbtest.module.test.sourcepath">
+    <dirset dir="${module.simpledbtest.basedir}/../../java">
+      <include name="SimpleDBTest"/>
+    </dirset>
+  </path>
+  
+  
+  <target name="compile.module.simpledbtest" depends="compile.module.simpledbtest.production" description="Compile module SimpleDBTest"/>
+  
+  <target name="compile.module.simpledbtest.production" description="Compile module SimpleDBTest; production classes">
+    <mkdir dir="${simpledbtest.output.dir}"/>
+    <javac destdir="${simpledbtest.output.dir}" fork="true">
+      <compilerarg line="${compiler.args.simpledbtest}"/>
+      <bootclasspath refid="simpledbtest.module.bootclasspath"/>
+      <classpath refid="simpledbtest.module.production.classpath"/>
+      <src refid="simpledbtest.module.sourcepath"/>
+    </javac>
+    
+    <copy todir="${simpledbtest.output.dir}">
+      <fileset dir="${module.simpledbtest.basedir}/src">
+        <type type="file"/>
+      </fileset>
+    </copy>
+  </target>
+  
+  <target name="clean.module.simpledbtest" description="cleanup module">
+    <delete dir="${simpledbtest.output.dir}"/>
+    <delete dir="${simpledbtest.testoutput.dir}"/>
+  </target>
+  
+  <target name="init" description="Build initialization">
+    <!-- Perform any build initialization in this target -->
+  </target>
+  
+  <target name="clean" depends="clean.module.simpledbtest" description="cleanup all"/>
+  
+  <target name="build.modules" depends="init, clean, compile.module.simpledbtest" description="build all modules"/>
+  
+  <target name="init.artifacts">
+    <property name="artifacts.temp.dir" value="${basedir}/__artifacts_temp"/>
+    <property name="artifact.output.simpledbtest:jar" value="${basedir}/out/artifacts/jar"/>
+    <mkdir dir="${artifacts.temp.dir}"/>
+    <property name="temp.jar.path.SimpleDBTest.jar" value="${artifacts.temp.dir}/SimpleDBTest.jar"/>
+  </target>
+  
+  <target name="artifact.simpledbtest:jar" depends="init.artifacts, compile.module.simpledbtest" description="Build &#39;SimpleDBTest:jar&#39; artifact">
+
+    <property name="artifact.temp.output.simpledbtest:jar" value="${artifacts.temp.dir}/SimpleDBTest_jar"/>
+    <mkdir dir="${artifact.temp.output.simpledbtest:jar}"/>
+    <jar destfile="${temp.jar.path.SimpleDBTest.jar}" duplicate="preserve" filesetmanifest="mergewithoutmain">
+      <manifest>
+        <attribute name="Main-Class" value="com.dom.DBLoadTest"/>
+      </manifest>
+      <zipfileset dir="${simpledbtest.output.dir}"/>
+      <zipfileset src="${basedir}/lib/ojdbc8-19.3.0.0.jar"/>
+      <zipfileset src="${basedir}/lib/ons-19.3.0.0.jar"/>
+      <zipfileset src="${basedir}/lib/oraclepki-19.3.0.0.jar"/>
+      <zipfileset src="${basedir}/lib/osdt_cert-19.3.0.0.jar"/>
+      <zipfileset src="${basedir}/lib/osdt_core-19.3.0.0.jar"/>
+      <zipfileset src="${basedir}/lib/simplefan-19.3.0.0.jar"/>
+      <zipfileset src="${basedir}/lib/ucp-19.3.0.0.jar"/>
+      <zipfileset src="${basedir}/lib/postgresql-42.2.14.jre7.jar"/>
+      <zipfileset src="${basedir}/lib/commons-cli-1.4.jar"/>
+    </jar>
+    <copy file="${temp.jar.path.SimpleDBTest.jar}" tofile="${basedir}/SimpleDBTest.jar"/>
+  </target>
+  
+  <target name="build.all.artifacts" depends="artifact.simpledbtest:jar" description="Build all artifacts">
+    <delete dir="${artifacts.temp.dir}"/>
+  </target>
+  
+  <target name="all" depends="build.modules, build.all.artifacts" description="build all"/>
+</project>
