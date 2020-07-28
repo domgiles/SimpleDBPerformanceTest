@@ -28,7 +28,7 @@ usage: parameters:
  -sql <select_type>      which select statement to run (choices are :
                          lookup,range_scan,count)
  -st <type>              benchmark test, relational or document
- -t <db>                 target oracle or postgresql
+ -t <db>                 target oracle, mysql or postgresql
  -tc <threadcount>       thread count, defaults to 1
  -ts                     table sizes
  -u <username>           username
