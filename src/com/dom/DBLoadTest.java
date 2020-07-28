@@ -1,8 +1,10 @@
 package com.dom;
 
+import com.mysql.cj.jdbc.MysqlDataSource;
 import oracle.jdbc.pool.OracleDataSource;
 import org.apache.commons.cli.*;
 import org.postgresql.ds.PGSimpleDataSource;
+
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -174,6 +176,8 @@ public class DBLoadTest {
     private static final String DROP_DATE_IDX = "DROP INDEX COL7_IDX";
     private static final String DROP_FLOAT_IDX = "DROP INDEX COL4_IDX";
     private static final String DROP_VARCHAR_IDX = "DROP INDEX COL10_IDX";
+    private static final String NON_ORACLE_LIMIT = " limit 30";
+    private static final String ORACLE_LIMIT = " fetch next 30 rows only";
 
     private static final String PG_TABLE_SIZE_SQL = String.format("SELECT\n" +
             "  table_schema,\n" +
@@ -279,6 +283,21 @@ public class DBLoadTest {
             return connection;
         } catch (SQLException e) {
             logger.log(FINE, "SQL Exception Thown in pconnect()", e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static Connection mysqlconnect(String un, String pw, String cs, Boolean doAsync) throws RuntimeException, Error {
+        try {
+            MysqlDataSource mds = new MysqlDataSource();
+            mds.setUser(un);
+            mds.setPassword(pw);
+            mds.setUrl(cs);
+            Connection connection = mds.getConnection();
+            connection.setAutoCommit(false);
+            return connection;
+        } catch (SQLException e) {
+            logger.log(FINE, "SQL Exception Thown in mysqlconnect()", e);
             throw new RuntimeException(e);
         }
     }
@@ -516,13 +535,19 @@ public class DBLoadTest {
         if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.ORACLE) {
             connection = connect((String) pclo.get(CommandLineOptions.USERNAME),
                     (String) pclo.get(CommandLineOptions.PASSWORD),
-                    String.format("jdbc:oracle:thin:@%s", (String) pclo.get(CommandLineOptions.CONNECT_STRING)),
+                    String.format("jdbc:oracle:thin:@%s",  pclo.get(CommandLineOptions.CONNECT_STRING)),
+                    (Boolean) pclo.get(CommandLineOptions.ASYNC));
+            return connection;
+        } else if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.POSTGRESQL) {
+            connection = pconnect((String) pclo.get(CommandLineOptions.USERNAME),
+                    (String) pclo.get(CommandLineOptions.PASSWORD),
+                    String.format("jdbc:postgresql:%s", pclo.get(CommandLineOptions.CONNECT_STRING)),
                     (Boolean) pclo.get(CommandLineOptions.ASYNC));
             return connection;
         } else {
-            connection = pconnect((String) pclo.get(CommandLineOptions.USERNAME),
+            connection = mysqlconnect((String) pclo.get(CommandLineOptions.USERNAME),
                     (String) pclo.get(CommandLineOptions.PASSWORD),
-                    String.format("jdbc:postgresql:%s", (String) pclo.get(CommandLineOptions.CONNECT_STRING)),
+                    String.format("jdbc:mysql:%s",  pclo.get(CommandLineOptions.CONNECT_STRING)),
                     (Boolean) pclo.get(CommandLineOptions.ASYNC));
             return connection;
         }
@@ -673,7 +698,12 @@ public class DBLoadTest {
                         }
                     }
                 } else if (bmq == BenchmarkQuery.SIMPLE_RANGE_SCAN || bmq == BenchmarkQuery.SIMPLE_COUNT) {
-                    try (PreparedStatement ps = ((Connection) connectionObject[0]).prepareStatement(bmq.getSql())) {
+                    String limit_rows = NON_ORACLE_LIMIT;
+                    if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.ORACLE) {
+                        limit_rows = ORACLE_LIMIT;
+                    }
+                    String sql = bmq.getSql() + limit_rows;
+                    try (PreparedStatement ps = ((Connection) connectionObject[0]).prepareStatement(sql)) {
                         LocalDate rd;
                         for (int i = 0; i < selectsToPerformPerThread; i++) {
                             rd = randomDate(tenYearsAgo, 3650);
@@ -1192,8 +1222,10 @@ public class DBLoadTest {
             if (cl.hasOption("t")) {
                 if (cl.getOptionValue("t").equals("postgresql")) {
                     parsedOptions.put(CommandLineOptions.TARGET_TYPE, DBType.POSTGRESQL);
-                } else {
+                } else if (cl.getOptionValue("t").equals("oracle")) {
                     parsedOptions.put(CommandLineOptions.TARGET_TYPE, DBType.ORACLE);
+                } else {
+                    parsedOptions.put(CommandLineOptions.TARGET_TYPE, DBType.MYSQL);
                 }
             } else {
                 parsedOptions.put(CommandLineOptions.TARGET_TYPE, DBType.ORACLE);

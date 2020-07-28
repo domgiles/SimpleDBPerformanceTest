@@ -11,5 +11,6 @@
     <orderEntry type="library" name="Apache Commons" level="project" />
     <orderEntry type="library" name="Oracle jdbc" level="project" />
     <orderEntry type="library" name="Postgresql jdbc" level="project" />
+    <orderEntry type="library" name="MySQL jdbc" level="project" />
   </component>
 </module>
