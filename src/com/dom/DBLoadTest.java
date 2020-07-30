@@ -43,6 +43,8 @@ public class DBLoadTest {
 
     private static final Logger logger = Logger.getLogger(DBLoadTest.class.getName());
     private static final String TABLE_NAME = "just_a_table";
+    private static final String SMALL_TABLE_NAME = "just_a_small_table";
+    private static final int SMALL_TABLE_NUMROWS = 20000;
 
     private enum CommandLineOptions {
         USERNAME,
@@ -90,7 +92,7 @@ public class DBLoadTest {
     }
 
     private enum BenchmarkTask {
-        CREATE_TABLES, CREATE_INDEXS, DROP_INDEXES, INSERT, UPDATE, SELECT, MIXED, FULL_WORKLOAD, TABLE_SIZE;
+        CREATE_TABLES, CREATE_INDEXS, DROP_INDEXES, DROP_TABLES, INSERT, UPDATE, SELECT, MIXED, FULL_WORKLOAD, TABLE_SIZE;
 
         public static BenchmarkTask parseCLOption(String value) {
             switch (value) {
@@ -108,6 +110,8 @@ public class DBLoadTest {
                     return CREATE_INDEXS;
                 case "di":
                     return DROP_INDEXES;
+                case "d":
+                    return DROP_TABLES;
                 case "full":
                     return FULL_WORKLOAD;
                 case "ts":
@@ -149,6 +153,7 @@ public class DBLoadTest {
 
 
     private static final String DROP_TABLE = String.format("DROP TABLE %s", TABLE_NAME);
+    private static final String DROP_SMALL_TABLE = String.format("DROP TABLE %s", SMALL_TABLE_NAME);
     private static final String VACUUM_TABLE = String.format("VACUUM ANALYZE %s", TABLE_NAME);
     private static final String CREATE_TABLE = String.format("CREATE TABLE %s (\n" +
             "COLUMN1\t\tnumeric(20) \t    NOT NULL,\n" +
@@ -166,13 +171,26 @@ public class DBLoadTest {
             "COLUMN13\t\tchar(10)\t       NOT NULL\n" +
             ")", TABLE_NAME);
 
+    private static final String CREATE_SMALL_TABLE = String.format("CREATE TABLE %s (\n" +
+            "SMALL_COLUMN1\t\tsmallint \t    NOT NULL,\n" +
+            "SMALL_COLUMN2\t\tnumeric(20) \t    NOT NULL,\n" +
+            "SMALL_COLUMN3\t\tDATE\t            NOT NULL,\n" +
+            "SMALL_COLUMN4\t\tvarchar(100)\t    NOT NULL,\n" +
+            "SMALL_COLUMN5\t\tchar(10)\t        NOT NULL\n" +
+            ")", SMALL_TABLE_NAME);
+
     private static final String INSERT_STATEMENT = String.format("insert into %s(column1,column2,column3,column4,column5,column6,column7,column8,column9,column10,column11,column12,column13) values (?,?,?,?,?,?,?,?,?,?,?,?,?)", TABLE_NAME);
+    private static final String SMALL_INSERT_STATEMENT = String.format("insert into %s(small_column1,small_column2,small_column3,small_column4,small_column5) values (?,?,?,?,?)", SMALL_TABLE_NAME);
     private static final String UPDATE_STATEMENT = String.format("update %s set COLUMN4 = ?, COLUMN10 = ? where COLUMN1 = ?", TABLE_NAME);
     private static final String CREATE_PK_INDEX = String.format("ALTER TABLE %s ADD CONSTRAINT col1_pk PRIMARY KEY (column1)", TABLE_NAME);
+    private static final String CREATE_SMALL_PK_INDEX = String.format("ALTER TABLE %s ADD CONSTRAINT small_col1_pk PRIMARY KEY (small_column1)", SMALL_TABLE_NAME);
+    private static final String CREATE_SMALL_FK = String.format("ALTER TABLE %s ADD ( CONSTRAINT column1_fk FOREIGN KEY (COUMN) REFERENCES %s (column1));", TABLE_NAME, SMALL_TABLE_NAME);
     private static final String CREATE_DATE_INDEX = String.format("CREATE INDEX COL7_IDX ON %s(COLUMN7)", TABLE_NAME);
     private static final String CREATE_FLOAT_INDEX = String.format("CREATE INDEX COL4_IDX ON %s(COLUMN4)", TABLE_NAME);
     private static final String CREATE_VARCHAR_INDEX = String.format("CREATE INDEX COL10_IDX ON %s(COLUMN10)", TABLE_NAME);
     private static final String DROP_PK_IDX = String.format("ALTER TABLE %s drop constraint col1_pk", TABLE_NAME);
+    private static final String DROP_MYSQL_PK_IDX = String.format("ALTER TABLE %s DROP PRIMARY KEY", TABLE_NAME);
+
     private static final String DROP_DATE_IDX = "DROP INDEX COL7_IDX";
     private static final String DROP_FLOAT_IDX = "DROP INDEX COL4_IDX";
     private static final String DROP_VARCHAR_IDX = "DROP INDEX COL10_IDX";
@@ -304,19 +322,75 @@ public class DBLoadTest {
 
     private static void createTables(Connection connection) throws RuntimeException {
         try (Statement st = connection.createStatement();) {
-            try {
-                st.execute(DROP_TABLE);
-                logger.fine(String.format("Table %s dropped", TABLE_NAME));
-            } catch (Exception sqle) {
-                logger.log(FINE, "Table hasn't been created yet");
-                connection.commit(); // Don't like this but Postgresql aborts a transaction on exception
-            }
+            dropTables(connection);
             st.execute(CREATE_TABLE);
-            logger.fine(String.format("Table %s created", TABLE_NAME));
+            logger.fine(String.format("Table \"%s\" created", TABLE_NAME));
+            st.execute(CREATE_SMALL_TABLE);
+            logger.fine(String.format("Table \"%s\" created", SMALL_TABLE_NAME));
             connection.commit();
+            logger.fine("Inserting static data into Small Table");
+            insertSmallTableData(connection);
         } catch (Exception e) {
             logger.log(FINE, "SQL Exception Thrown in createTables()", e);
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Drop the two tables used as part of the testing
+     * @param connection Connection to the user that has the tables installed
+     * @throws RuntimeException
+     */
+    private static void dropTables(Connection connection) throws RuntimeException {
+        try (Statement st = connection.createStatement();) {
+            st.execute(DROP_TABLE);
+            logger.fine(String.format("Table \"%s\" dropped", TABLE_NAME));
+        } catch (SQLException e) {
+            logger.log(FINE, "Table \"%s\" hasn't been created yet", TABLE_NAME);
+        }
+
+        try (Statement st = connection.createStatement();) {
+            st.execute(DROP_SMALL_TABLE);
+            logger.fine(String.format("Table \"%s\" dropped", SMALL_TABLE_NAME));
+        } catch (SQLException e) {
+            logger.log(FINE, "Table \"%s\" hasn't been created yet", SMALL_TABLE_NAME);
+        }
+    }
+
+    /**
+     * Routine to insert static data into a small table. This table is simply used for join performance testing.
+     *
+     * @param connection Connection to the user that has the tables installed
+     * @throws RuntimeException
+     */
+    private static void insertSmallTableData(Connection connection) throws RuntimeException {
+        LocalDate tenYearsAgo = LocalDate.now().minusYears(10);
+        int batchsize = 200;
+        maxId = 0L;
+        try (PreparedStatement ps = connection.prepareStatement(SMALL_INSERT_STATEMENT)) {
+            for (int i = 0; i < SMALL_TABLE_NUMROWS; i++) {
+                ps.setLong(1, getNextVal());
+                ps.setInt(2, randomInteger(1, 20000));
+                ps.setDate(3, java.sql.Date.valueOf(randomDate(tenYearsAgo, 3650)));
+                ps.setString(4, Long.toString(randomInteger(100000, 1000000)));
+                ps.setString(5, "HelloWorld");
+                ps.addBatch();
+                if (i % batchsize == 0) {
+                    ps.executeBatch();
+                }
+            }
+            ps.executeBatch();
+            connection.commit();
+            try (Statement st = connection.createStatement();) {
+                st.execute(CREATE_SMALL_PK_INDEX);
+                connection.commit();
+            }
+            logger.fine("Static data for \"just_a_small_table\" inserted");
+        } catch (SQLException e) {
+            logger.log(FINE, "SQL Exception Thrown in insertSmallTableData()", e);
+            throw new RuntimeException(e);
+        } finally {
+            maxId = 0L;
         }
     }
 
@@ -338,13 +412,19 @@ public class DBLoadTest {
         }
     }
 
-    private static void dropIndexes(Connection connection) throws SQLException {
+    private static void dropIndexes(Connection connection, Map<CommandLineOptions, Object> pclo) throws SQLException {
         try (Statement st = connection.createStatement();) {
             try {
-                st.execute(DROP_PK_IDX);
-                st.execute(DROP_FLOAT_IDX);
-                st.execute(DROP_DATE_IDX);
-                st.execute(DROP_VARCHAR_IDX);
+                String additionalDropClause = "";
+                if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.MYSQL) {
+                    additionalDropClause = String.format(" ON %s", TABLE_NAME);
+                    st.execute(DROP_MYSQL_PK_IDX);
+                } else {
+                    st.execute(DROP_PK_IDX);
+                }
+                st.execute(DROP_FLOAT_IDX + additionalDropClause);
+                st.execute(DROP_DATE_IDX + additionalDropClause);
+                st.execute(DROP_VARCHAR_IDX + additionalDropClause);
                 logger.fine(String.format("Indexes Dropped", TABLE_NAME));
                 connection.commit();
             } catch (SQLException e) {
@@ -436,15 +516,15 @@ public class DBLoadTest {
             try (PreparedStatement ps = connection.prepareStatement(INSERT_STATEMENT)) {
                 for (int i = 0; i < rowsToInsert; i++) {
                     ps.setLong(1, getNextVal());
-                    ps.setInt(2, 9999);
+                    ps.setInt(2, randomInteger(1, 20000));
                     ps.setInt(3, 999999999);
-                    ps.setFloat(4, 9999999.99f);
+                    ps.setFloat(4, randomInteger(100, 100000));
                     ps.setFloat(5, 9999999.999999f);
                     ps.setFloat(6, 9999999.999999f);
                     ps.setDate(7, java.sql.Date.valueOf(randomDate(tenYearsAgo, 3650)));
                     ps.setTimestamp(8, Timestamp.valueOf(randomDate(tenYearsAgo, 3650).atStartOfDay()));
                     ps.setString(9, "Hello");
-                    ps.setString(10, "World!!");
+                    ps.setString(10, Long.toString(randomInteger(100000, 1000000)));
                     ps.setString(11, "Hello World!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                     ps.setString(12, "H");
                     ps.setString(13, "HelloWorld");
@@ -485,6 +565,13 @@ public class DBLoadTest {
 
     private static ReentrantLock lock = new ReentrantLock();
 
+
+    /**
+     * Generate a unique sequence. This code needs to be better parallised to support multiple threads.
+     * There is a suspicion that this is a bottleneck. A version returning a range would be a better implementation.
+     *
+     * @return The next incremented long
+     */
     private static Long getNextVal() {
         Long val;
         try {
@@ -535,7 +622,7 @@ public class DBLoadTest {
         if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.ORACLE) {
             connection = connect((String) pclo.get(CommandLineOptions.USERNAME),
                     (String) pclo.get(CommandLineOptions.PASSWORD),
-                    String.format("jdbc:oracle:thin:@%s",  pclo.get(CommandLineOptions.CONNECT_STRING)),
+                    String.format("jdbc:oracle:thin:@%s", pclo.get(CommandLineOptions.CONNECT_STRING)),
                     (Boolean) pclo.get(CommandLineOptions.ASYNC));
             return connection;
         } else if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.POSTGRESQL) {
@@ -547,7 +634,7 @@ public class DBLoadTest {
         } else {
             connection = mysqlconnect((String) pclo.get(CommandLineOptions.USERNAME),
                     (String) pclo.get(CommandLineOptions.PASSWORD),
-                    String.format("jdbc:mysql:%s",  pclo.get(CommandLineOptions.CONNECT_STRING)),
+                    String.format("jdbc:mysql:%s", pclo.get(CommandLineOptions.CONNECT_STRING)),
                     (Boolean) pclo.get(CommandLineOptions.ASYNC));
             return connection;
         }
@@ -975,7 +1062,8 @@ public class DBLoadTest {
                     (benchmark != BenchmarkTask.CREATE_INDEXS) &&
                     (benchmark != BenchmarkTask.DROP_INDEXES) &&
                     (benchmark != BenchmarkTask.FULL_WORKLOAD) &&
-                    (benchmark != BenchmarkTask.TABLE_SIZE)) {
+                    (benchmark != BenchmarkTask.TABLE_SIZE) &&
+                    (benchmark != BenchmarkTask.DROP_TABLES)) {
 
                 int threadCount = (Integer) pclo.get(CommandLineOptions.THREAD_COUNT);
                 Long rowsToInsert = (Long) pclo.get(CommandLineOptions.ROWS_TO_INSERT);
@@ -1033,7 +1121,10 @@ public class DBLoadTest {
                 System.out.println(table.render());
             } else if (benchmark == BenchmarkTask.DROP_INDEXES) {
                 Connection connection = getConnection(pclo);
-                dropIndexes(connection);
+                dropIndexes(connection, pclo);
+            } else if (benchmark == BenchmarkTask.DROP_TABLES) {
+                Connection connection = getConnection(pclo);
+                dropTables(connection);
             } else if (benchmark == BenchmarkTask.TABLE_SIZE) {
                 Connection connection = getConnection(pclo);
                 tableSizes(connection, pclo);
@@ -1098,7 +1189,8 @@ public class DBLoadTest {
         Option option18 = new Option("create", "create tables");
         Option option27 = new Option("ts", "table sizes");
         Option option24 = new Option("full", "full workload run");
-        optionGroup.addOption(option1).addOption(option2).addOption(option3).addOption(option4).addOption(option22).addOption(option23).addOption(option18).addOption(option24).addOption(option27);
+        Option option28 = new Option("d", "drop tables");
+        optionGroup.addOption(option1).addOption(option2).addOption(option3).addOption(option4).addOption(option22).addOption(option23).addOption(option18).addOption(option24).addOption(option27).addOption(option28);
         options.addOptionGroup(optionGroup);
         Option option8 = new Option("u", "username");
         option8.setRequired(true);
@@ -1129,7 +1221,7 @@ public class DBLoadTest {
         Option option16 = new Option("st", "benchmark test, relational or document");
         option16.setArgs(1);
         option16.setArgName("type");
-        Option option17 = new Option("t", "target oracle or postgresql");
+        Option option17 = new Option("t", "target oracle, mysql or postgresql");
         option17.setArgs(1);
         option17.setArgName("db");
         Option option19 = new Option("sql", "which select statement to run (choices are : lookup,range_scan,count)");

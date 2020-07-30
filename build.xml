@@ -20,6 +20,10 @@
   <path id="library.postgresql_jdbc.classpath">
     <pathelement location="${basedir}/lib/postgresql-42.2.14.jre7.jar"/>
   </path>
+
+  <path id="library.mysql_jdbc.classpath">
+    <pathelement location="${basedir}/lib/mysql-connector-java-8.0.21.jar"/>
+  </path>
   
   <dirname property="module.simpledbtest.basedir" file="${ant.file}"/>
   
@@ -36,6 +40,7 @@
     <path refid="library.apache_commons.classpath"/>
     <path refid="library.oracle_jdbc.classpath"/>
     <path refid="library.postgresql_jdbc.classpath"/>
+    <path refid="library.mysql_jdbc.classpath"/>
   </path>
   
   <path id="simpledbtest.runtime.production.module.classpath">
@@ -43,6 +48,7 @@
     <path refid="library.apache_commons.classpath"/>
     <path refid="library.oracle_jdbc.classpath"/>
     <path refid="library.postgresql_jdbc.classpath"/>
+    <path refid="library.mysql_jdbc.classpath"/>
   </path>
   
   <path id="simpledbtest.module.classpath">
@@ -50,6 +56,7 @@
     <path refid="library.apache_commons.classpath"/>
     <path refid="library.oracle_jdbc.classpath"/>
     <path refid="library.postgresql_jdbc.classpath"/>
+    <path refid="library.mysql_jdbc.classpath"/>
   </path>
   
   <path id="simpledbtest.runtime.module.classpath">
@@ -58,6 +65,7 @@
     <path refid="library.apache_commons.classpath"/>
     <path refid="library.oracle_jdbc.classpath"/>
     <path refid="library.postgresql_jdbc.classpath"/>
+    <path refid="library.mysql_jdbc.classpath"/>
   </path>
 
   
@@ -129,6 +137,7 @@
       <zipfileset src="${basedir}/lib/simplefan-19.3.0.0.jar"/>
       <zipfileset src="${basedir}/lib/ucp-19.3.0.0.jar"/>
       <zipfileset src="${basedir}/lib/postgresql-42.2.14.jre7.jar"/>
+      <zipfileset src="${basedir}/lib/mysql-connector-java-8.0.21.jar"/>
       <zipfileset src="${basedir}/lib/commons-cli-1.4.jar"/>
     </jar>
     <copy file="${temp.jar.path.SimpleDBTest.jar}" tofile="${basedir}/SimpleDBTest.jar"/>
