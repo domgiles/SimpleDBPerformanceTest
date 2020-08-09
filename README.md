@@ -1,5 +1,5 @@
 # SimpleDBPerformanceTest
-Yeat another simple performance test for Oracle, PostreSQL and MySQL. The test can run one of a number of tests against Oracle, PostgreSQL and MySQL. Currently it has been tested on Oracle 19c, 20c and PostgreSQL 12. It's a trivial test and not much about the capabilities of any of the databases can be derived from it.
+Yet another performance test for Oracle, PostreSQL and MySQL. The test can run one of a number of tests against Oracle, PostgreSQL and MySQL. Currently it has been tested on Oracle 19c, 20c and PostgreSQL 12. It's a trivial test and not much about the capabilities of any of the databases can be derived from it.
 
 The test does expect you have created a database and user to allow the application to connect to.
 
@@ -28,7 +28,7 @@ usage: parameters:
  -sql <select_type>      which select statement to run (choices are :
                          lookup,range_scan,count)
  -st <type>              benchmark test, relational or document
- -t <db>                 target oracle or postgresql
+ -t <db>                 target oracle, mysql or postgresql
  -tc <threadcount>       thread count, defaults to 1
  -ts                     table sizes
  -u <username>           username
