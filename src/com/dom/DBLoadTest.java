@@ -23,6 +23,8 @@ import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 /*
  * Copyright 2020 Dominic Giles. All rights reserved.
@@ -61,7 +63,8 @@ public class DBLoadTest {
         SELECT_COMMAND,
         OPERATIONS_TO_PERFORM,
         DATA_RANGE,
-        OUTPUT_RESULTS
+        OUTPUT_RESULTS,
+        ORA_CREDENTIALS_FILE
     }
 
     private enum OutputDestination {
@@ -92,7 +95,7 @@ public class DBLoadTest {
     }
 
     private enum BenchmarkTask {
-        CREATE_TABLES, CREATE_INDEXS, DROP_INDEXES, DROP_TABLES, INSERT, UPDATE, SELECT, MIXED, FULL_WORKLOAD, TABLE_SIZE;
+        CREATE_TABLES, CREATE_INDEXS, DROP_INDEXES, DROP_TABLES, INSERT, UPDATE, SELECT, MIXED, FULL_WORKLOAD, TABLE_SIZE, CREATE_ALL;
 
         public static BenchmarkTask parseCLOption(String value) {
             switch (value) {
@@ -104,10 +107,12 @@ public class DBLoadTest {
                     return SELECT;
                 case "m":
                     return MIXED;
-                case "create":
+                case "ct":
                     return CREATE_TABLES;
                 case "ci":
                     return CREATE_INDEXS;
+                case "ca":
+                    return CREATE_ALL;
                 case "di":
                     return DROP_INDEXES;
                 case "d":
@@ -125,7 +130,8 @@ public class DBLoadTest {
     private enum BenchmarkQuery {
         SIMPLE_LOOKUP(String.format("select * from %s where column1 = ?", TABLE_NAME)),
         SIMPLE_RANGE_SCAN(String.format("select * from %s where column7 between ? and ?", TABLE_NAME)),
-        SIMPLE_COUNT(String.format("select count(*) from %s where column7 between ? and ?", TABLE_NAME));
+        SIMPLE_COUNT(String.format("select count(*) from %s where column7 between ? and ?", TABLE_NAME)),
+        SIMPLE_JOIN(String.format("select count(*) from %s t1, %s t2 where t2.small_column1 = ? and t1.column2 = t2.small_column1", TABLE_NAME, SMALL_TABLE_NAME));
 
         private final String sql;
 
@@ -145,6 +151,8 @@ public class DBLoadTest {
                     return SIMPLE_RANGE_SCAN;
                 case "count":
                     return SIMPLE_COUNT;
+                case "simple_join":
+                    return SIMPLE_JOIN;
                 default:
                     throw new RuntimeException("Unrecognised sql operation option");
             }
@@ -184,7 +192,7 @@ public class DBLoadTest {
     private static final String UPDATE_STATEMENT = String.format("update %s set COLUMN4 = ?, COLUMN10 = ? where COLUMN1 = ?", TABLE_NAME);
     private static final String CREATE_PK_INDEX = String.format("ALTER TABLE %s ADD CONSTRAINT col1_pk PRIMARY KEY (column1)", TABLE_NAME);
     private static final String CREATE_SMALL_PK_INDEX = String.format("ALTER TABLE %s ADD CONSTRAINT small_col1_pk PRIMARY KEY (small_column1)", SMALL_TABLE_NAME);
-    private static final String CREATE_SMALL_FK = String.format("ALTER TABLE %s ADD ( CONSTRAINT column1_fk FOREIGN KEY (COUMN) REFERENCES %s (column1));", TABLE_NAME, SMALL_TABLE_NAME);
+    private static final String CREATE_FK_TO_SMALL = String.format("ALTER TABLE %s ADD CONSTRAINT JUST_A_TABLE_FK FOREIGN KEY (COLUMN2) REFERENCES %s (SMALL_COLUMN1)", TABLE_NAME, SMALL_TABLE_NAME);
     private static final String CREATE_DATE_INDEX = String.format("CREATE INDEX COL7_IDX ON %s(COLUMN7)", TABLE_NAME);
     private static final String CREATE_FLOAT_INDEX = String.format("CREATE INDEX COL4_IDX ON %s(COLUMN4)", TABLE_NAME);
     private static final String CREATE_VARCHAR_INDEX = String.format("CREATE INDEX COL10_IDX ON %s(COLUMN10)", TABLE_NAME);
@@ -323,13 +331,31 @@ public class DBLoadTest {
     private static void createTables(Connection connection) throws RuntimeException {
         try (Statement st = connection.createStatement();) {
             dropTables(connection);
+            connection.commit();
             st.execute(CREATE_TABLE);
+            connection.commit();
             logger.fine(String.format("Table \"%s\" created", TABLE_NAME));
             st.execute(CREATE_SMALL_TABLE);
-            logger.fine(String.format("Table \"%s\" created", SMALL_TABLE_NAME));
             connection.commit();
+            logger.fine(String.format("Table \"%s\" created", SMALL_TABLE_NAME));
             logger.fine("Inserting static data into Small Table");
             insertSmallTableData(connection);
+            connection.commit();
+        } catch (Exception e) {
+            logger.log(FINE, "SQL Exception Thrown in createTables()", e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static void createAll(Connection connection, Map<CommandLineOptions, Object> pclo) throws RuntimeException {
+        try {
+            dropTables(connection);
+            connection.commit();
+            createTables(connection);
+            connection.commit();
+            insertBigTableData(pclo);
+            connection.commit();
+            createIndexes(connection, pclo);
         } catch (Exception e) {
             logger.log(FINE, "SQL Exception Thrown in createTables()", e);
             throw new RuntimeException(e);
@@ -338,22 +364,52 @@ public class DBLoadTest {
 
     /**
      * Drop the two tables used as part of the testing
+     *
      * @param connection Connection to the user that has the tables installed
      * @throws RuntimeException
      */
     private static void dropTables(Connection connection) throws RuntimeException {
-        try (Statement st = connection.createStatement();) {
-            st.execute(DROP_TABLE);
-            logger.fine(String.format("Table \"%s\" dropped", TABLE_NAME));
-        } catch (SQLException e) {
-            logger.log(FINE, "Table \"%s\" hasn't been created yet", TABLE_NAME);
-        }
+        try {
+            try (Statement st = connection.createStatement();) {
+                st.execute(DROP_TABLE);
+                logger.fine(String.format("Table \"%s\" dropped", TABLE_NAME));
+            } catch (SQLException e) {
+                logger.log(FINE, String.format("Table \"%s\" hasn't been created yet", TABLE_NAME));
+            }
+            connection.commit();
+            try (Statement st = connection.createStatement();) {
+                st.execute(DROP_SMALL_TABLE);
+                logger.fine(String.format("Table \"%s\" dropped", SMALL_TABLE_NAME));
+            } catch (SQLException e) {
+                logger.log(FINE, String.format("Table \"%s\" hasn't been created yet", SMALL_TABLE_NAME));
+            }
+            connection.commit();
 
-        try (Statement st = connection.createStatement();) {
-            st.execute(DROP_SMALL_TABLE);
-            logger.fine(String.format("Table \"%s\" dropped", SMALL_TABLE_NAME));
         } catch (SQLException e) {
-            logger.log(FINE, "Table \"%s\" hasn't been created yet", SMALL_TABLE_NAME);
+            e.printStackTrace();
+        }
+    }
+
+    private static void insertBigTableData(Map<CommandLineOptions, Object> pclo) {
+        long startMillis = System.currentTimeMillis();
+        try {
+            int threadCount = (Integer) pclo.get(CommandLineOptions.THREAD_COUNT);
+            Long rowsToInsert = (Long) pclo.get(CommandLineOptions.ROWS_TO_INSERT);
+            Long rowsToInsertPerThread = rowsToInsert / threadCount;
+            List<Object[]> connectResults = connectBenchmark(pclo);
+            OptionalDouble avgConnectTime = connectResults.stream().mapToLong(r -> (Long) r[1]).average();
+            long connectionTime = System.currentTimeMillis() - startMillis;
+            logger.fine(String.format("Connected %d threads, Average connect time = %f, Total Real Time to Connect = %d", threadCount, avgConnectTime.orElse(0), connectionTime));
+            maxId = getMaxId((Connection) connectResults.get(0)[0]);
+            startMillis = System.currentTimeMillis();
+            long opTime = 0;
+            String taskDescription = "";
+            logger.fine(String.format("Asking all %d threads to insert %d rows each into the table %s", threadCount, rowsToInsertPerThread, TABLE_NAME));
+            List<Long> benchmarkResults = insertBenchmark(pclo, connectResults);
+            renderResults("Ingest via DML", connectionTime, rowsToInsert, System.currentTimeMillis() - startMillis, pclo);
+            OptionalDouble avgUpdateTime = benchmarkResults.stream().mapToLong(r -> r).average();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -402,9 +458,11 @@ public class DBLoadTest {
                 st.execute(CREATE_FLOAT_INDEX);
                 st.execute(CREATE_DATE_INDEX);
                 st.execute(CREATE_VARCHAR_INDEX);
+                st.execute(CREATE_FK_TO_SMALL);
                 if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.POSTGRESQL)
                     vacuumAndAnalyze(connection);
 //                connection.commit();
+                logger.fine("Created indexes on %s".format(TABLE_NAME));
             } catch (SQLException e) {
                 logger.log(FINE, "SQL Exception Thrown in createIndexes()", e);
                 throw new RuntimeException(e);
@@ -449,64 +507,121 @@ public class DBLoadTest {
         }
     }
 
-    private static void doMixed(Connection connection, Long operations, Long dataRange, Long sleep) {
+    /**
+     * mixedBenchmark is reponsible for launching all of the threads that will do the work. It collects the timings for each thread
+     * in an array of Longs.
+     *
+     * @param pclo           A map of command line parameters
+     * @param connectionList A list of connections to be used by the threads
+     * @return A List of arrays of 7 Longs describing the time taken for each mixed DML operation [Select Time, Select Count, Insert Time, Insert Count, Update Time, Update Count, Total]
+     * @throws Exception
+     */
+    private static List<Long[]> mixedBenchmark(Map<CommandLineOptions, Object> pclo, List<Object[]> connectionList) throws Exception {
+
+        int threadCount = (Integer) pclo.get(CommandLineOptions.THREAD_COUNT);
+        Long operations = (Long) pclo.get(CommandLineOptions.OPERATIONS_TO_PERFORM);
+        Long dataRange = (Long) pclo.get(CommandLineOptions.DATA_RANGE);
+        Long operationsPerThread = operations / threadCount;
+
+        List<Callable<Long[]>> mixedTests = new ArrayList<>();
+        for (int i = 0; i < connectionList.size(); i++) {
+            Object[] connObject = connectionList.get(i);
+            int id = i;
+            Callable<Long[]> mixedTask = () -> {
+                long start = System.currentTimeMillis();
+                Long[] timings = doMixed(id, (Connection) connObject[0],
+                        operationsPerThread,
+                        dataRange,
+                        0L);
+                timings[6] = System.currentTimeMillis() - start;
+                return timings;
+            };
+            mixedTests.add(mixedTask);
+        }
+
+        ExecutorService executor = Executors.newWorkStealingPool();
+        return executor.invokeAll(mixedTests).stream().map(future -> {
+            try {
+                return future.get();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        }).collect(Collectors.toList());
+    }
+
+    /**
+     * Run a number of mixed (select, insert, update) dmls all within the same transaction. Commit on completing 10 of those
+     * operations.
+     *
+     * @param connection Connection to the schema/user/role in which the workload is being run
+     * @param operations Total number of operations/transactions to run
+     * @param dataRange  Number of rows in the schema (used for lookups)
+     * @param sleep      Time to sleep between transactions
+     * @return An array of 7 Longs describing the time taken for each mixed DML operation [Select Time, Select Count, Insert Time, Insert Count, Update Time, Update Count, Total]
+     */
+    private static Long[] doMixed(int id, Connection connection, Long operations, Long dataRange, Long sleep) {
+        Long[] stats = {0L, 0L, 0L, 0L, 0L, 0L, 0L};
         try {
             LocalDate tenYearsAgo = LocalDate.now().minusYears(10);
-            Random r = new Random();
+            // Seed Random so transactions counts are always same
+            Random r = new Random(id);
             for (int x = 0; x < operations; x++) {
-                int t = r.nextInt(3);
-                switch (t) {
-                    case 0:
+                // Transaction Boundary
+                for (int z = 0; z < 10; z++) {
+                    int t = r.nextInt(10);
+                    if (t >= 0 & t <= 5) {
+                        long time = System.currentTimeMillis();
                         try (PreparedStatement ps = (connection.prepareStatement(BenchmarkQuery.SIMPLE_LOOKUP.getSql()))) {
-                            for (int i = 0; i < 10; i++) {
-                                Long v = randomLong(1, dataRange);
-                                ps.setLong(1, v);
-                                try (ResultSet rs = ps.executeQuery()) {
-                                    rs.next();
-                                }
+                            long v = randomLong(1, dataRange);
+                            ps.setLong(1, v);
+                            try (ResultSet rs = ps.executeQuery()) {
+                                rs.next();
                             }
                         }
-                        break;
-
-                    case 1:
+                        stats[0] = stats[0] + (System.currentTimeMillis() - time);
+                        stats[1] = stats[1] + 1;
+                    } else if (t <= 7) {
+                        long time = System.currentTimeMillis();
                         try (PreparedStatement ps = connection.prepareStatement(INSERT_STATEMENT)) {
-                            for (int i = 0; i < 3; i++) {
-                                ps.setLong(1, getNextVal());
-                                ps.setInt(2, 9999);
-                                ps.setInt(3, 999999999);
-                                ps.setFloat(4, 9999999.99f);
-                                ps.setFloat(5, 9999999.999999f);
-                                ps.setFloat(6, 9999999.999999f);
-                                ps.setDate(7, java.sql.Date.valueOf(randomDate(tenYearsAgo, 3650)));
-                                ps.setTimestamp(8, Timestamp.valueOf(randomDate(tenYearsAgo, 3650).atStartOfDay()));
-                                ps.setString(9, "Hello");
-                                ps.setString(10, "World!!");
-                                ps.setString(11, "Hello World!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                                ps.setString(12, "H");
-                                ps.setString(13, "HelloWorld");
-                                ps.executeUpdate();
-                            }
-
+                            ps.setLong(1, getNextVal());
+                            ps.setInt(2, randomInteger(1, SMALL_TABLE_NUMROWS));
+                            ps.setInt(3, 999999999);
+                            ps.setFloat(4, 9999999.99f);
+                            ps.setFloat(5, 9999999.999999f);
+                            ps.setFloat(6, 9999999.999999f);
+                            ps.setDate(7, java.sql.Date.valueOf(randomDate(tenYearsAgo, 3650)));
+                            ps.setTimestamp(8, Timestamp.valueOf(randomDate(tenYearsAgo, 3650).atStartOfDay()));
+                            ps.setString(9, "Hello");
+                            ps.setString(10, "World!!");
+                            ps.setString(11, "Hello World!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                            ps.setString(12, "H");
+                            ps.setString(13, "HelloWorld");
+                            ps.executeUpdate();
                         }
-                        break;
-                    case 2:
+                        stats[2] = stats[2] + (System.currentTimeMillis() - time);
+                        stats[3] = stats[3] + 1;
+                    } else {
+                        long time = System.currentTimeMillis();
                         try (PreparedStatement ps = connection.prepareStatement(UPDATE_STATEMENT)) {
-                            for (int i = 0; i < 2; i++) {
-                                ps.setDouble(1, randomInteger(1, 1000000000) + 0.1);
-                                ps.setString(2, String.format("%" + randomInteger(1, 48) + "s", " ").replace(' ', '*'));
-                                ps.setLong(3, randomLong(1, dataRange));
-                                ps.executeUpdate();
-                            }
+                            ps.setDouble(1, randomInteger(1, 1000000000) + 0.1);
+                            ps.setString(2, String.format("%" + randomInteger(1, 48) + "s", " ").replace(' ', '*'));
+                            ps.setLong(3, randomLong(1, dataRange));
+                            ps.executeUpdate();
                         }
+                        stats[4] = stats[4] + (System.currentTimeMillis() - time);
+                        stats[5] = stats[5] + 1;
+                    }
+                    if (sleep > 0)
+                        Thread.sleep(randomLong(0, sleep));
                 }
                 connection.commit();
-                if (sleep > 0)
-                    Thread.sleep(randomLong(0, sleep));
+                // End Transaction
             }
 
         } catch (Exception e) {
-            logger.log(FINE, "Exception Thrown in start() : ", e);
+            logger.log(FINE, "Exception Thrown in doMixed() : ", e);
         }
+        return stats;
     }
 
 
@@ -516,7 +631,7 @@ public class DBLoadTest {
             try (PreparedStatement ps = connection.prepareStatement(INSERT_STATEMENT)) {
                 for (int i = 0; i < rowsToInsert; i++) {
                     ps.setLong(1, getNextVal());
-                    ps.setInt(2, randomInteger(1, 20000));
+                    ps.setInt(2, randomInteger(1, SMALL_TABLE_NUMROWS));
                     ps.setInt(3, 999999999);
                     ps.setFloat(4, randomInteger(100, 100000));
                     ps.setFloat(5, 9999999.999999f);
@@ -620,7 +735,7 @@ public class DBLoadTest {
     public static Connection getConnection(Map<CommandLineOptions, Object> pclo) {
         Connection connection;
         if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.ORACLE) {
-            connection = connect((String) pclo.get(CommandLineOptions.USERNAME),
+                        connection = connect((String) pclo.get(CommandLineOptions.USERNAME),
                     (String) pclo.get(CommandLineOptions.PASSWORD),
                     String.format("jdbc:oracle:thin:@%s", pclo.get(CommandLineOptions.CONNECT_STRING)),
                     (Boolean) pclo.get(CommandLineOptions.ASYNC));
@@ -731,35 +846,6 @@ public class DBLoadTest {
         }).collect(Collectors.toList());
     }
 
-    private static List<Long> mixedBenchmark(Map<CommandLineOptions, Object> pclo, List<Object[]> connectionList) throws Exception {
-
-        int threadCount = (Integer) pclo.get(CommandLineOptions.THREAD_COUNT);
-        Long operations = (Long) pclo.get(CommandLineOptions.OPERATIONS_TO_PERFORM);
-        Long dataRange = (Long) pclo.get(CommandLineOptions.DATA_RANGE);
-        Long operationsPerThread = operations / threadCount;
-
-        List<Callable<Long>> mixedTests = new ArrayList<>();
-        for (Object[] connectionResult : connectionList) {
-            Callable<Long> mixedTask = () -> {
-                Long start = System.currentTimeMillis();
-                doMixed((Connection) connectionResult[0],
-                        operationsPerThread,
-                        dataRange,
-                        0L);
-                return System.currentTimeMillis() - start;
-            };
-            mixedTests.add(mixedTask);
-        }
-
-        ExecutorService executor = Executors.newWorkStealingPool();
-        return executor.invokeAll(mixedTests).stream().map(future -> {
-            try {
-                return future.get();
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
-        }).collect(Collectors.toList());
-    }
 
     private static List<Long> selectBenchmark(Map<CommandLineOptions, Object> pclo, List<Object[]> connectionList) throws Exception {
 
@@ -803,6 +889,24 @@ public class DBLoadTest {
                         }
 
                     }
+                } else if (bmq == BenchmarkQuery.SIMPLE_JOIN) {
+                    String limit_rows = NON_ORACLE_LIMIT;
+                    if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.ORACLE) {
+                        limit_rows = ORACLE_LIMIT;
+                    }
+                    String sql = bmq.getSql() + limit_rows;
+                    try (PreparedStatement ps = ((Connection) connectionObject[0]).prepareStatement(sql)) {
+                        LocalDate rd;
+                        for (int i = 0; i < selectsToPerformPerThread; i++) {
+                            Long v = randomLong(1, SMALL_TABLE_NUMROWS);
+                            ps.setLong(1, v);
+                            try (ResultSet rs = ps.executeQuery()) {
+                                rs.next();
+//                                printResults(rs);
+                            }
+                        }
+
+                    }
                 }
                 return System.currentTimeMillis() - start;
             };
@@ -835,6 +939,17 @@ public class DBLoadTest {
         AsciiTable table = new AsciiTable();
         table.addColumns(new String[]{"Test Name", "Operations", "Operations/sec", "Connection Time", "Total Time", "Threads", "Target", "Commits", "Batch", "Async"});
         table.addRow(getResultString(description, connectionTime, operations, timeTaken, pclo));
+        table.calculateColumnWidth();
+        System.out.println(table.render());
+    }
+
+    private static void renderMixedResults(String description, Long selectOperations, Long selectTime, Long insertOperations, Long insertTime, Long updateOperations, Long updateTime) {
+        AsciiTable table = new AsciiTable();
+        table.addColumns(new String[]{"Test Name", "Total Select Count", "Total Select Time", "Avg Select Response", "Total Insert Count", "Total Insert Time", "Avg Insert Response", "Total Update Count", "Total Update Time", "Avg Update Response"});
+        double i = ((double) selectTime / 1000d) / (double) selectOperations;
+        table.addRow(new String[]{description, Long.toString(selectOperations), convertMilliseconds(selectTime), String.format("%.4f", ((double) selectTime / 1000d) / (double) selectOperations),
+                Long.toString(insertOperations), convertMilliseconds(insertTime), String.format("%.4f", ((double) insertTime / 1000d) / (double) insertOperations),
+                Long.toString(updateOperations), convertMilliseconds(updateTime), String.format("%.4f", ((double) updateTime / 1000d) / (double) updateOperations)});
         table.calculateColumnWidth();
         System.out.println(table.render());
     }
@@ -969,6 +1084,18 @@ public class DBLoadTest {
             results.add(getResultString(String.format("Select : %s", pclo.get(CommandLineOptions.SELECT_COMMAND)), connectionTime, operationsToPerform, timeTaken, pclo));
             closeConnections(connectInfo);
         }
+        pclo.put(CommandLineOptions.SELECT_COMMAND, BenchmarkQuery.SIMPLE_JOIN);
+        for (Integer threadCount : threadWorkload) {
+            pclo.put(CommandLineOptions.THREAD_COUNT, threadCount);
+            start = System.currentTimeMillis();
+            connectInfo = connectBenchmark(pclo);
+            connectionTime = System.currentTimeMillis() - start;
+            start = System.currentTimeMillis();
+            selectBenchmark(pclo, connectInfo);
+            timeTaken = System.currentTimeMillis() - start;
+            results.add(getResultString(String.format("Select : %s", pclo.get(CommandLineOptions.SELECT_COMMAND)), connectionTime, operationsToPerform, timeTaken, pclo));
+            closeConnections(connectInfo);
+        }
         return results;
     }
 
@@ -1058,8 +1185,10 @@ public class DBLoadTest {
         try {
             Map<CommandLineOptions, Object> pclo = parseCommandLine(args);
             BenchmarkTask benchmark = (BenchmarkTask) pclo.get(CommandLineOptions.BENCHMARK_TYPE);
+            Optional.ofNullable(pclo.get(CommandLineOptions.ORA_CREDENTIALS_FILE)).ifPresent((fileName) -> OracleCloudCredentialsFile.setupSecureOracleCloudProperties("ALongPassw0rd!!", (String)fileName, true));
             if ((benchmark != BenchmarkTask.CREATE_TABLES) &&
                     (benchmark != BenchmarkTask.CREATE_INDEXS) &&
+                    (benchmark != BenchmarkTask.CREATE_ALL) &&
                     (benchmark != BenchmarkTask.DROP_INDEXES) &&
                     (benchmark != BenchmarkTask.FULL_WORKLOAD) &&
                     (benchmark != BenchmarkTask.TABLE_SIZE) &&
@@ -1100,16 +1229,24 @@ public class DBLoadTest {
                     logger.fine(String.format("Finished Select tests : Average Total Select Time/thread = %,.0f, Total Time Select Time Across All Threads = %,d", avgSelectTime.orElse(0), opTime));
                 } else if (benchmark == BenchmarkTask.MIXED) {
                     Long mixedToPerform = (Long) pclo.get(CommandLineOptions.OPERATIONS_TO_PERFORM);
-                    List<Long> benchmarkResults = mixedBenchmark(pclo, connectResults);
+                    List<Long[]> benchmarkResults = mixedBenchmark(pclo, connectResults);
+                    // Create a stream of integers the length of the result array, then stream through the results summing them up, map this to an object, then collect them into a list.
+                    List<Long> sumList = IntStream.range(0, benchmarkResults.get(0).length)
+                            .mapToObj(i -> benchmarkResults.stream().mapToLong(l -> l[i]).sum())
+                            .collect(Collectors.toList());
                     renderResults("Mixed Workload", connectionTime, mixedToPerform, System.currentTimeMillis() - startMillis, pclo);
-                    OptionalDouble avgSelectTime = benchmarkResults.stream().mapToLong(r -> r).average();
-                    logger.fine(String.format("Finished Mixed tests : Average Total Mixed Ops Time/thread = %,.0f, Total Time Mixed Ops Time Across All Threads = %,d", avgSelectTime.orElse(0), opTime));
+                    renderMixedResults("DML Break Down", sumList.get(1), sumList.get(0), sumList.get(3), sumList.get(2), sumList.get(5), sumList.get(3));
+//                    OptionalDouble avgSelectTime = benchmarkResults.stream().mapToLong(r -> r).average();
+//                    logger.fine(String.format("Finished Mixed tests : Average Total Mixed Ops Time/thread = %,.0f, Total Time Mixed Ops Time Across All Threads = %,d", avgSelectTime.orElse(0), opTime));
                 }
             } else if (benchmark == BenchmarkTask.FULL_WORKLOAD) {
                 runFullWorkload(pclo);
             } else if (benchmark == BenchmarkTask.CREATE_TABLES) {
                 Connection connection = getConnection(pclo);
                 createTables(connection);
+            } else if (benchmark == BenchmarkTask.CREATE_ALL) {
+                Connection connection = getConnection(pclo);
+                createAll(connection, pclo);
             } else if (benchmark == BenchmarkTask.CREATE_INDEXS) {
                 Connection connection = getConnection(pclo);
                 long start = System.currentTimeMillis();
@@ -1185,12 +1322,13 @@ public class DBLoadTest {
         Option option3 = new Option("s", "run select workload");
         Option option4 = new Option("m", "run mixed workload");
         Option option22 = new Option("ci", "create indexes");
+        Option option29 = new Option("ca", "create all DDL (Tables, Indexes) and populate with data");
         Option option23 = new Option("di", "drop indexes");
-        Option option18 = new Option("create", "create tables");
+        Option option18 = new Option("ct", "create just the tables");
         Option option27 = new Option("ts", "table sizes");
         Option option24 = new Option("full", "full workload run");
         Option option28 = new Option("d", "drop tables");
-        optionGroup.addOption(option1).addOption(option2).addOption(option3).addOption(option4).addOption(option22).addOption(option23).addOption(option18).addOption(option24).addOption(option27).addOption(option28);
+        optionGroup.addOption(option1).addOption(option2).addOption(option3).addOption(option4).addOption(option22).addOption(option23).addOption(option18).addOption(option24).addOption(option27).addOption(option28).addOption(option29);
         options.addOptionGroup(optionGroup);
         Option option8 = new Option("u", "username");
         option8.setRequired(true);
@@ -1204,6 +1342,10 @@ public class DBLoadTest {
         option10.setArgs(1);
         option10.setRequired(true);
         option10.setArgName("connectstring");
+        Option option31 = new Option("cred", "Oracle Cloud credentials zip file");
+        option31.setArgs(1);
+        option31.setRequired(false);
+        option31.setArgName("credentials");
         Option option11 = new Option("rc", "row count, defaults to 100");
         option11.setArgs(1);
         option11.setArgName("rowcount");
@@ -1224,7 +1366,7 @@ public class DBLoadTest {
         Option option17 = new Option("t", "target oracle, mysql or postgresql");
         option17.setArgs(1);
         option17.setArgName("db");
-        Option option19 = new Option("sql", "which select statement to run (choices are : lookup,range_scan,count)");
+        Option option19 = new Option("sql", "which select statement to run (choices are : lookup,range_scan,count,simple_join)");
         option19.setArgs(1);
         option19.setArgName("select_type");
         Option option20 = new Option("ops", "operations to perform i.e. select, updates");
@@ -1243,7 +1385,8 @@ public class DBLoadTest {
         options.addOption(option8).addOption(option9).addOption(option10).addOption(option30).
                 addOption(option11).addOption(option12).addOption(option13).addOption(option14).
                 addOption(option15).addOption(option16).addOption(option17).addOption(option18).
-                addOption(option19).addOption(option20).addOption(option21).addOption(option25);
+                addOption(option19).addOption(option20).addOption(option21).addOption(option25).
+                addOption(option31);
         CommandLineParser clp = new DefaultParser();
         CommandLine cl;
         try {
@@ -1269,6 +1412,9 @@ public class DBLoadTest {
             }
             if (cl.hasOption("cs")) {
                 parsedOptions.put(CommandLineOptions.CONNECT_STRING, cl.getOptionValue("cs"));
+            }
+            if (cl.hasOption("cred")) {
+                parsedOptions.put(CommandLineOptions.ORA_CREDENTIALS_FILE, cl.getOptionValue("cred"));
             }
             if (cl.hasOption("rc")) {
                 parsedOptions.put(CommandLineOptions.ROWS_TO_INSERT, Long.parseLong(cl.getOptionValue("rc")));
@@ -1297,6 +1443,8 @@ public class DBLoadTest {
             }
             if (cl.hasOption("ops")) {
                 parsedOptions.put(CommandLineOptions.OPERATIONS_TO_PERFORM, Long.parseLong(cl.getOptionValue("ops")));
+            } else {
+                parsedOptions.put(CommandLineOptions.OPERATIONS_TO_PERFORM, 1000);
             }
             if (cl.hasOption("dr")) {
                 parsedOptions.put(CommandLineOptions.DATA_RANGE, Long.parseLong(cl.getOptionValue("dr")));

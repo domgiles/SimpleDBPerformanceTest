@@ -1,11 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="MySQL - soe@localhost" uuid="7b60750a-8341-4114-9f8e-f93f51c7d028">
+    <data-source source="LOCAL" name="Local MySQL - SOE" uuid="7b60750a-8341-4114-9f8e-f93f51c7d028">
       <driver-ref>mysql.8</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
       <jdbc-url>jdbc:mysql://localhost:3306/soe</jdbc-url>
+    </data-source>
+    <data-source source="LOCAL" name="Local PostgreSQL - SOE" uuid="31cd4613-329d-42bf-a577-a17fba3cf3de">
+      <driver-ref>postgresql</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.postgresql.Driver</jdbc-driver>
+      <jdbc-url>jdbc:postgresql://localhost:5432/soe</jdbc-url>
+    </data-source>
+    <data-source source="LOCAL" name="GCP MySQL - SOE" uuid="6feb42c5-78f1-4e40-b0b7-025fefc28473">
+      <driver-ref>mysql.8</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
+      <jdbc-url>jdbc:mysql://34.105.252.53:3306/soe</jdbc-url>
+    </data-source>
+    <data-source source="LOCAL" name="GCP PostgreSQL - SOE" uuid="8ddba373-c477-4040-8846-c724f3a4ab7a">
+      <driver-ref>postgresql</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.postgresql.Driver</jdbc-driver>
+      <jdbc-url>jdbc:postgresql://35.242.184.51:5432/soe</jdbc-url>
+    </data-source>
+    <data-source source="LOCAL" name="Local Oracle - SOE" uuid="855780a8-db00-4c50-a986-b078995e2ace">
+      <driver-ref>oracle</driver-ref>
+      <synchronize>true</synchronize>
+      <auto-commit>false</auto-commit>
+      <jdbc-driver>oracle.jdbc.OracleDriver</jdbc-driver>
+      <jdbc-url>jdbc:oracle:thin:@//localhost:1521/soe</jdbc-url>
     </data-source>
   </component>
 </project>
