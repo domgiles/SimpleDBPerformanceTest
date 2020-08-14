@@ -524,7 +524,7 @@ public class DBLoadTest {
 
         int threadCount = (Integer) pclo.get(CommandLineOptions.THREAD_COUNT);
         Long operations = (Long) pclo.get(CommandLineOptions.OPERATIONS_TO_PERFORM);
-        Long dataRange = (Long) pclo.get(CommandLineOptions.DATA_RANGE);
+        Long dataRange = Optional.ofNullable((Long) pclo.get(CommandLineOptions.DATA_RANGE)).orElse(getMaxId((Connection)connectionList.get(0)[0]));
         Long operationsPerThread = operations / threadCount;
 
         List<Callable<Long[]>> mixedTests = new ArrayList<>();
