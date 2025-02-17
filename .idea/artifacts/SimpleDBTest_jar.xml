@@ -3,9 +3,6 @@
     <output-path>$PROJECT_DIR$</output-path>
     <root id="archive" name="SimpleDBTest.jar">
       <element id="module-output" name="SimpleDBPerformanceTest" />
-      <element id="library" level="project" name="Apache Commons" />
-      <element id="library" level="project" name="Oracle jdbc" />
-      <element id="library" level="project" name="Postgresql jdbc" />
     </root>
   </artifact>
 </component>

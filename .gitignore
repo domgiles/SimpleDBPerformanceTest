@@ -1,3 +1,16 @@
 # Project exclude paths
 /out/
 /debug.log
+/lib/commons-cli.jar
+/lib/mysql-connector-j.jar
+/lib/ojdbc11.jar
+/lib/ons.jar
+/lib/oraclepki.jar
+/lib/orai18n.jar
+/lib/postgresql.jar
+/lib/protobuf-java.jar
+/lib/rsi.jar
+/lib/simplefan.jar
+/lib/ucp11.jar
+/lib/xdb.jar
+/lib/xmlparserv2.jar

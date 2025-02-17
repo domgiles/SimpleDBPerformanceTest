@@ -4,7 +4,7 @@
   <property file="build.properties"/>
   
   <path id="library.apache_commons.classpath">
-    <pathelement location="${basedir}/lib/commons-cli-1.4.jar"/>
+    <pathelement location="${basedir}/lib/commons-cli.jar"/>
   </path>
 
   <target name="purge-libs">
@@ -160,10 +160,10 @@
       </manifest>
       <zipfileset dir="${simpledbtest.output.dir}"/>
       <zipfileset src="${basedir}/lib/ojdbc11.jar"/>
-      <zipfileset src="${basedir}/lib/ons1.jar"/>
-      <zipfileset src="${basedir}/lib/oraclepki1.jar"/>
-      <zipfileset src="${basedir}/lib/simplefan1.jar"/>
-      <zipfileset src="${basedir}/lib/ucp.jar"/>
+      <zipfileset src="${basedir}/lib/ons.jar"/>
+      <zipfileset src="${basedir}/lib/oraclepki.jar"/>
+      <zipfileset src="${basedir}/lib/simplefan.jar"/>
+      <zipfileset src="${basedir}/lib/ucp11.jar"/>
       <zipfileset src="${basedir}/lib/postgresql.jar"/>
       <zipfileset src="${basedir}/lib/mysql-connector-j.jar"/>
       <zipfileset src="${basedir}/lib/commons-cli.jar"/>

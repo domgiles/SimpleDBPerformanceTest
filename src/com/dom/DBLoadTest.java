@@ -524,7 +524,7 @@ public class DBLoadTest {
 
         int threadCount = (Integer) pclo.get(CommandLineOptions.THREAD_COUNT);
         Long operations = (Long) pclo.get(CommandLineOptions.OPERATIONS_TO_PERFORM);
-        Long dataRange = Optional.ofNullable((Long) pclo.get(CommandLineOptions.DATA_RANGE)).orElse(getMaxId((Connection)connectionList.get(0)[0]));
+        Long dataRange = Optional.ofNullable((Long) pclo.get(CommandLineOptions.DATA_RANGE)).orElse(getMaxId((Connection) connectionList.get(0)[0]));
         Long operationsPerThread = operations / threadCount;
 
         List<Callable<Long[]>> mixedTests = new ArrayList<>();
@@ -566,60 +566,61 @@ public class DBLoadTest {
     private static Long[] doMixed(int id, Connection connection, Long operations, Long dataRange, Long sleep) {
         Long[] stats = {0L, 0L, 0L, 0L, 0L, 0L, 0L};
         try {
-            LocalDate tenYearsAgo = LocalDate.now().minusYears(10);
-            // Seed Random so transactions counts are always same
-            Random r = new Random(id);
-            for (int x = 0; x < operations; x++) {
-                // Transaction Boundary
-                for (int z = 0; z < 10; z++) {
-                    int t = r.nextInt(10);
-                    if (t >= 0 & t <= 5) {
-                        long time = System.currentTimeMillis();
-                        try (PreparedStatement ps = (connection.prepareStatement(BenchmarkQuery.SIMPLE_LOOKUP.getSql()))) {
-                            long v = randomLong(1, dataRange);
-                            ps.setLong(1, v);
-                            try (ResultSet rs = ps.executeQuery()) {
+            try (PreparedStatement selectPS = (connection.prepareStatement(BenchmarkQuery.SIMPLE_LOOKUP.getSql()));
+                 PreparedStatement insertPS = connection.prepareStatement(INSERT_STATEMENT);
+                 PreparedStatement updatePS = connection.prepareStatement(UPDATE_STATEMENT);
+            ) {
+                LocalDate tenYearsAgo = LocalDate.now().minusYears(10);
+                // Seed Random so transactions counts are always same
+                Random r = new Random(id);
+                for (int x = 0; x < operations; x++) {
+                    // Transaction Boundary
+                    // Every transaction does 10 DML operation
+                    for (int z = 0; z < 10; z++) {
+                        int t = r.nextInt(10);
+                        if (t >= 0 & t <= 5) {
+                            long time = System.currentTimeMillis();
+                            selectPS.setLong(1, randomLong(1, dataRange));
+                            try (ResultSet rs = selectPS.executeQuery()) {
                                 rs.next();
                             }
+                            stats[0] = stats[0] + (System.currentTimeMillis() - time);
+                            stats[1] = stats[1] + 1;
                         }
-                        stats[0] = stats[0] + (System.currentTimeMillis() - time);
-                        stats[1] = stats[1] + 1;
-                    } else if (t <= 7) {
-                        long time = System.currentTimeMillis();
-                        try (PreparedStatement ps = connection.prepareStatement(INSERT_STATEMENT)) {
-                            ps.setLong(1, getNextVal());
-                            ps.setInt(2, randomInteger(1, SMALL_TABLE_NUMROWS));
-                            ps.setInt(3, 999999999);
-                            ps.setFloat(4, 9999999.99f);
-                            ps.setFloat(5, 9999999.999999f);
-                            ps.setFloat(6, 9999999.999999f);
-                            ps.setDate(7, java.sql.Date.valueOf(randomDate(tenYearsAgo, 3650)));
-                            ps.setTimestamp(8, Timestamp.valueOf(randomDate(tenYearsAgo, 3650).atStartOfDay()));
-                            ps.setString(9, "Hello");
-                            ps.setString(10, "World!!");
-                            ps.setString(11, "Hello World!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-                            ps.setString(12, "H");
-                            ps.setString(13, "HelloWorld");
-                            ps.executeUpdate();
+                        else if (t <= 7) {
+                            long time = System.currentTimeMillis();
+                            insertPS.setLong(1, getNextVal());
+                            insertPS.setInt(2, randomInteger(1, SMALL_TABLE_NUMROWS));
+                            insertPS.setInt(3, 999999999);
+                            insertPS.setFloat(4, 9999999.99f);
+                            insertPS.setFloat(5, 9999999.999999f);
+                            insertPS.setFloat(6, 9999999.999999f);
+                            insertPS.setDate(7, java.sql.Date.valueOf(randomDate(tenYearsAgo, 3650)));
+                            insertPS.setTimestamp(8, Timestamp.valueOf(randomDate(tenYearsAgo, 3650).atStartOfDay()));
+                            insertPS.setString(9, "Hello");
+                            insertPS.setString(10, "World!!");
+                            insertPS.setString(11, "Hello World!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                            insertPS.setString(12, "H");
+                            insertPS.setString(13, "HelloWorld");
+                            insertPS.executeUpdate();
+                            stats[2] = stats[2] + (System.currentTimeMillis() - time);
+                            stats[3] = stats[3] + 1;
                         }
-                        stats[2] = stats[2] + (System.currentTimeMillis() - time);
-                        stats[3] = stats[3] + 1;
-                    } else {
-                        long time = System.currentTimeMillis();
-                        try (PreparedStatement ps = connection.prepareStatement(UPDATE_STATEMENT)) {
-                            ps.setDouble(1, randomInteger(1, 1000000000) + 0.1);
-                            ps.setString(2, String.format("%" + randomInteger(1, 48) + "s", " ").replace(' ', '*'));
-                            ps.setLong(3, randomLong(1, dataRange));
-                            ps.executeUpdate();
+                        else {
+                            long time = System.currentTimeMillis();
+                            updatePS.setDouble(1, randomInteger(1, 1000000000) + 0.1);
+                            updatePS.setString(2, String.format("%" + randomInteger(1, 48) + "s", " ").replace(' ', '*'));
+                            updatePS.setLong(3, randomLong(1, dataRange));
+                            updatePS.executeUpdate();
+                            stats[4] = stats[4] + (System.currentTimeMillis() - time);
+                            stats[5] = stats[5] + 1;
                         }
-                        stats[4] = stats[4] + (System.currentTimeMillis() - time);
-                        stats[5] = stats[5] + 1;
+                        if (sleep > 0)
+                            Thread.sleep(randomLong(0, sleep));
                     }
-                    if (sleep > 0)
-                        Thread.sleep(randomLong(0, sleep));
+                    connection.commit();
+                    // End Transaction
                 }
-                connection.commit();
-                // End Transaction
             }
 
         } catch (Exception e) {
@@ -857,14 +858,14 @@ public class DBLoadTest {
         Long operationsPerThread = operations / threadCount;
 
         List<Callable<Long>> updateTests = new ArrayList<>();
-        for (Object[] connectionResult : connectionList) {
-            Callable<Long> updateTask = () -> {
-                Long start = System.currentTimeMillis();
-                doUpdates((Connection) connectionResult[0],
-                        operationsPerThread,
-                        dataRange,
-                        (Long) pclo.get(CommandLineOptions.BATCH_SIZE),
-                        (Long) pclo.get(CommandLineOptions.COMMIT_FREQUENCY));
+                for (Object[] connectionResult : connectionList) {
+                    Callable<Long> updateTask = () -> {
+                        Long start = System.currentTimeMillis();
+                        doUpdates((Connection) connectionResult[0],
+                                operationsPerThread,
+                                dataRange,
+                                (Long) pclo.get(CommandLineOptions.BATCH_SIZE),
+                                (Long) pclo.get(CommandLineOptions.COMMIT_FREQUENCY));
                 return System.currentTimeMillis() - start;
             };
             updateTests.add(updateTask);
@@ -1589,7 +1590,7 @@ public class DBLoadTest {
                     if (type == Types.VARCHAR || type == Types.CHAR) {
                         String columnValue = rs.getString(i);
                         stringOutput.append(String.format("%1$-20s|", columnValue));
-                    } else if (type == Types.NUMERIC || type == Types.BIGINT || type == Types.INTEGER || type == Types.SMALLINT|| type == Types.TINYINT) {
+                    } else if (type == Types.NUMERIC || type == Types.BIGINT || type == Types.INTEGER || type == Types.SMALLINT || type == Types.TINYINT) {
                         Long columnValue = rs.getLong(i);
                         stringOutput.append(String.format("%1$20d|", columnValue));
                     }
