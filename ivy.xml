@@ -1,0 +1,12 @@
+<ivy-module version="2.0">
+    <info organisation="com.dom" module="datagenerator"/>
+    <configurations defaultconfmapping="default">
+        <conf name="default"/>
+    </configurations>
+    <dependencies>
+        <dependency org="com.oracle.database.jdbc" name="ojdbc11-production" rev="latest.integration"/>
+        <dependency org="commons-cli" name="commons-cli" rev="latest.integration"/>
+        <dependency org="com.mysql" name="mysql-connector-j" rev="8.0.33"/>
+        <dependency org="org.postgresql" name="postgresql" rev="42.2.14"/>
+    </dependencies>
+</ivy-module>

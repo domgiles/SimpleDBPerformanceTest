@@ -1,28 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="simpledbtest" default="all">
+<project name="simpledbtest" default="all" xmlns:ivy="antlib:org.apache.ivy.ant">
 
   <property file="build.properties"/>
   
   <path id="library.apache_commons.classpath">
     <pathelement location="${basedir}/lib/commons-cli-1.4.jar"/>
   </path>
+
+  <target name="purge-libs">
+    <delete includeemptydirs="true" quiet="false" verbose="true">
+      <fileset dir="${libs}" includes="**/*"/>
+    </delete>
+  </target>
   
   <path id="library.oracle_jdbc.classpath">
-    <pathelement location="${basedir}/lib/ojdbc8-19.3.0.0.jar"/>
-    <pathelement location="${basedir}/lib/ons-19.3.0.0.jar"/>
-    <pathelement location="${basedir}/lib/oraclepki-19.3.0.0.jar"/>
-    <pathelement location="${basedir}/lib/osdt_cert-19.3.0.0.jar"/>
-    <pathelement location="${basedir}/lib/osdt_core-19.3.0.0.jar"/>
-    <pathelement location="${basedir}/lib/simplefan-19.3.0.0.jar"/>
-    <pathelement location="${basedir}/lib/ucp-19.3.0.0.jar"/>
+    <pathelement location="${basedir}/lib/ojdbc11.jar"/>
+    <pathelement location="${basedir}/lib/ons.jar"/>
+    <pathelement location="${basedir}/lib/oraclepki.jar"/>
+    <pathelement location="${basedir}/lib/simplefan.jar"/>
+    <pathelement location="${basedir}/lib/ucp.jar"/>
   </path>
-  
+
+  <property name="libs" location="lib"/>
+  <property name="ivy.install.version" value="2.4.0"/>
+  <property name="ivy.jar.dir" value="${basedir}/ivy"/>
+  <property name="ivy.jar.file" value="${ivy.jar.dir}/ivy.jar"/>
+
+  <target name="download-ivy" unless="skip.download">
+    <mkdir dir="${ivy.jar.dir}"/>
+    <echo message="installing ivy..."/>
+    <get src="https://repo1.maven.org/maven2/org/apache/ivy/ivy/${ivy.install.version}/ivy-${ivy.install.version}.jar"
+         dest="${ivy.jar.file}" usetimestamp="true"/>
+  </target>
+
+  <target name="install-ivy" depends="download-ivy" description="Install ivy">
+    <path id="ivy.lib.path">
+      <fileset dir="${ivy.jar.dir}" includes="*.jar"/>
+    </path>
+    <taskdef resource="org/apache/ivy/ant/antlib.xml" uri="antlib:org.apache.ivy.ant" classpathref="ivy.lib.path"/>
+  </target>
+
+  <target name="download-libs" depends="install-ivy" description="resolve dependencies">
+    <echo message="${libs}"/>
+    <echo message="Retrieving Java libs where needed..."/>
+    <mkdir dir="${libs}"/>
+    <ivy:retrieve pattern="${libs}/[artifact].[ext]"/>
+  </target>
+
   <path id="library.postgresql_jdbc.classpath">
-    <pathelement location="${basedir}/lib/postgresql-42.2.14.jre7.jar"/>
+    <pathelement location="${basedir}/lib/postgresql.jar"/>
   </path>
 
   <path id="library.mysql_jdbc.classpath">
-    <pathelement location="${basedir}/lib/mysql-connector-java-8.0.21.jar"/>
+    <pathelement location="${basedir}/lib/mysql-connector-j.jar"/>
   </path>
   
   <dirname property="module.simpledbtest.basedir" file="${ant.file}"/>
@@ -129,16 +159,14 @@
         <attribute name="Main-Class" value="com.dom.DBLoadTest"/>
       </manifest>
       <zipfileset dir="${simpledbtest.output.dir}"/>
-      <zipfileset src="${basedir}/lib/ojdbc8-19.3.0.0.jar"/>
-      <zipfileset src="${basedir}/lib/ons-19.3.0.0.jar"/>
-      <zipfileset src="${basedir}/lib/oraclepki-19.3.0.0.jar"/>
-      <zipfileset src="${basedir}/lib/osdt_cert-19.3.0.0.jar"/>
-      <zipfileset src="${basedir}/lib/osdt_core-19.3.0.0.jar"/>
-      <zipfileset src="${basedir}/lib/simplefan-19.3.0.0.jar"/>
-      <zipfileset src="${basedir}/lib/ucp-19.3.0.0.jar"/>
-      <zipfileset src="${basedir}/lib/postgresql-42.2.14.jre7.jar"/>
-      <zipfileset src="${basedir}/lib/mysql-connector-java-8.0.21.jar"/>
-      <zipfileset src="${basedir}/lib/commons-cli-1.4.jar"/>
+      <zipfileset src="${basedir}/lib/ojdbc11.jar"/>
+      <zipfileset src="${basedir}/lib/ons1.jar"/>
+      <zipfileset src="${basedir}/lib/oraclepki1.jar"/>
+      <zipfileset src="${basedir}/lib/simplefan1.jar"/>
+      <zipfileset src="${basedir}/lib/ucp.jar"/>
+      <zipfileset src="${basedir}/lib/postgresql.jar"/>
+      <zipfileset src="${basedir}/lib/mysql-connector-j.jar"/>
+      <zipfileset src="${basedir}/lib/commons-cli.jar"/>
     </jar>
     <copy file="${temp.jar.path.SimpleDBTest.jar}" tofile="${basedir}/SimpleDBTest.jar"/>
   </target>
