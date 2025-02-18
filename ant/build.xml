@@ -1,0 +1,32 @@
+<project name="SwingBench" default="dist" basedir=".">
+  <description>Build file for the SwingBench framework</description>
+  <property name="src" location="${basedir}"/>
+  <property name="build" location="classes"/>
+  <property name="dist" location="${basedir}"/>
+  <property name="swingbenchlib" location="../lib"/>
+  <path id="swingbench.class.path">
+    <pathelement path="${swingbenchlib}/orajsoda.jar:${swingbenchlib}/javax.json.jar:${swingbenchlib}/ojdbc8.jar:${swingbenchlib}/ucp.jar:${swingbenchlib}/swingbench.jar"/>
+  </path>
+  <target name="init">
+    <!-- Create the time stamp -->
+    <tstamp/>
+    <mkdir dir="${build}"/>
+  </target>
+  <target name="compile" depends="init" description="compile the source ">
+    <javac srcdir="${src}" destdir="${build}">
+      <classpath refid="swingbench.class.path"/>
+    </javac>
+  </target>
+  <target name="dist" depends="clean,compile,init"
+          description="generate the distribution">
+    <jar destfile="${swingbenchlib}/mytransactions.jar">
+      <fileset dir="${build}">
+        <include name="**/*.class"/>
+      </fileset>
+    </jar>
+  </target>
+  <target name="clean" description="clean up">
+    <delete dir="${basedir}/classes"/>
+    <delete file="${basedir}/mytransactions.jar"/>
+  </target>
+</project>

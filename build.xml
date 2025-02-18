@@ -3,24 +3,12 @@
 
   <property file="build.properties"/>
   
-  <path id="library.apache_commons.classpath">
-    <pathelement location="${basedir}/lib/commons-cli.jar"/>
-  </path>
-
   <target name="purge-libs">
     <delete includeemptydirs="true" quiet="false" verbose="true">
       <fileset dir="${libs}" includes="**/*"/>
     </delete>
   </target>
   
-  <path id="library.oracle_jdbc.classpath">
-    <pathelement location="${basedir}/lib/ojdbc11.jar"/>
-    <pathelement location="${basedir}/lib/ons.jar"/>
-    <pathelement location="${basedir}/lib/oraclepki.jar"/>
-    <pathelement location="${basedir}/lib/simplefan.jar"/>
-    <pathelement location="${basedir}/lib/ucp.jar"/>
-  </path>
-
   <property name="libs" location="lib"/>
   <property name="ivy.install.version" value="2.4.0"/>
   <property name="ivy.jar.dir" value="${basedir}/ivy"/>
@@ -54,6 +42,14 @@
   <path id="library.mysql_jdbc.classpath">
     <pathelement location="${basedir}/lib/mysql-connector-j.jar"/>
   </path>
+
+  <path id="library.oracle_jdbc.classpath">
+    <pathelement location="${basedir}/lib/ojdbc11.jar"/>
+    <pathelement location="${basedir}/lib/ons.jar"/>
+    <pathelement location="${basedir}/lib/oraclepki.jar"/>
+    <pathelement location="${basedir}/lib/simplefan.jar"/>
+    <pathelement location="${basedir}/lib/ucp.jar"/>
+  </path>
   
   <dirname property="module.simpledbtest.basedir" file="${ant.file}"/>
   
@@ -64,6 +60,10 @@
   
   <path id="simpledbtest.module.bootclasspath">
     <!-- Paths to be included in compilation bootclasspath -->
+  </path>
+
+  <path id="library.apache_commons.classpath">
+    <pathelement location="${basedir}/lib/commons-cli.jar"/>
   </path>
   
   <path id="simpledbtest.module.production.classpath">
@@ -98,7 +98,6 @@
     <path refid="library.mysql_jdbc.classpath"/>
   </path>
 
-  
   <path id="simpledbtest.module.sourcepath">
     <dirset dir="${module.simpledbtest.basedir}/../../java">
       <include name="SimpleDBPerformanceTest/src"/>
@@ -110,8 +109,7 @@
       <include name="SimpleDBTest"/>
     </dirset>
   </path>
-  
-  
+
   <target name="compile.module.simpledbtest" depends="compile.module.simpledbtest.production" description="Compile module SimpleDBTest"/>
   
   <target name="compile.module.simpledbtest.production" description="Compile module SimpleDBTest; production classes">
@@ -135,13 +133,9 @@
     <delete dir="${simpledbtest.testoutput.dir}"/>
   </target>
   
-  <target name="init" description="Build initialization">
-    <!-- Perform any build initialization in this target -->
-  </target>
-  
   <target name="clean" depends="clean.module.simpledbtest" description="cleanup all"/>
   
-  <target name="build.modules" depends="init, clean, compile.module.simpledbtest" description="build all modules"/>
+  <target name="build.modules" depends="clean, compile.module.simpledbtest" description="build all modules"/>
   
   <target name="init.artifacts">
     <property name="artifacts.temp.dir" value="${basedir}/__artifacts_temp"/>
@@ -167,6 +161,8 @@
       <zipfileset src="${basedir}/lib/postgresql.jar"/>
       <zipfileset src="${basedir}/lib/mysql-connector-j.jar"/>
       <zipfileset src="${basedir}/lib/commons-cli.jar"/>
+      <zipfileset src="${basedir}/lib/protobuf-java.jar"/>
+      <zipfileset src="${basedir}/lib/rsi.jar"/>
     </jar>
     <copy file="${temp.jar.path.SimpleDBTest.jar}" tofile="${basedir}/SimpleDBTest.jar"/>
   </target>
