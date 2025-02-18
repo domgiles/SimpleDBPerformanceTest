@@ -171,5 +171,5 @@
     <delete dir="${artifacts.temp.dir}"/>
   </target>
   
-  <target name="all" depends="build.modules, build.all.artifacts" description="build all"/>
+  <target name="all" depends="download-libs, build.modules, build.all.artifacts" description="build all"/>
 </project>
