@@ -260,9 +260,9 @@ public class DBLoadTest {
             "  details.table_schema,\n" +
             "  details.table_name,\n" +
             "  details.row_estimate,\n" +
-            "  format_size(table_size.unformatted_size) as table_size,\n" +
-            "  format_size(index_size.unformatted_size) as index_size,\n" +
-            "  format_size(table_size.unformatted_size + index_size.unformatted_size) AS total_size\n" +
+            "  table_size.unformatted_size as table_size,\n" +
+            "  index_size.unformatted_size as index_size,\n" +
+            "  table_size.unformatted_size + index_size.unformatted_size AS total_size\n" +
             "FROM details, table_size, index_size\n", TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase());
 
 
@@ -1132,7 +1132,7 @@ public class DBLoadTest {
         OutputDestination output = (OutputDestination) pclo.get(CommandLineOptions.OUTPUT_RESULTS);
         createTables(connection);
         DBType dbType = (DBType) pclo.get(CommandLineOptions.TARGET_TYPE);
-        table.addColumns(new String[]{"Test Name", "Total Time(ms)", "Target"});
+        table.addColumns(new String[]{"Test Name", "Total Time", "Target"});
         table.addRow(new String[]{"Create Tables", String.format("%d", System.currentTimeMillis() - start), pclo.get(CommandLineOptions.TARGET_TYPE).toString()});
         table.calculateColumnWidth();
         if (output == OutputDestination.STDOUT)
@@ -1158,7 +1158,7 @@ public class DBLoadTest {
         table = new AsciiTable();
         start = System.currentTimeMillis();
         createIndexes(connection, pclo);
-        table.addColumns(new String[]{"Test Name", "Total Time(ms)", "Target"});
+        table.addColumns(new String[]{"Test Name", "Total Time", "Target"});
         table.addRow(new String[]{"Create Indexes", String.format("%,d", System.currentTimeMillis() - start), pclo.get(CommandLineOptions.TARGET_TYPE).toString()});
         table.calculateColumnWidth();
         if (output == OutputDestination.STDOUT)
