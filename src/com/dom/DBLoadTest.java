@@ -1159,7 +1159,7 @@ public class DBLoadTest {
         start = System.currentTimeMillis();
         createIndexes(connection, pclo);
         table.addColumns(new String[]{"Test Name", "Total Time", "Target"});
-        table.addRow(new String[]{"Create Indexes", String.format("%,d", System.currentTimeMillis() - start), pclo.get(CommandLineOptions.TARGET_TYPE).toString()});
+        table.addRow(new String[]{"Create Indexes", String.format("%d", System.currentTimeMillis() - start), pclo.get(CommandLineOptions.TARGET_TYPE).toString()});
         table.calculateColumnWidth();
         if (output == OutputDestination.STDOUT)
             System.out.println(table.render());
