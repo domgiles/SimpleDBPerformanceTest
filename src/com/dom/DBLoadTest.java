@@ -573,12 +573,14 @@ public class DBLoadTest {
                 LocalDate tenYearsAgo = LocalDate.now().minusYears(10);
                 // Seed Random so transactions counts are always same
                 Random r = new Random(id);
+
                 for (int x = 0; x < operations; x++) {
+                    int NUMBER_OF_DML = 20;
                     // Transaction Boundary
-                    // Every transaction does 10 DML operation
-                    for (int z = 0; z < 10; z++) {
-                        int t = r.nextInt(10);
-                        if (t >= 0 & t <= 5) {
+                    // Every transaction does 20 DML operation
+                    for (int z = 0; z < NUMBER_OF_DML; z++) {
+                        int t = r.nextInt(NUMBER_OF_DML+1);
+                        if (t <= 14) {
                             long time = System.currentTimeMillis();
                             selectPS.setLong(1, randomLong(1, dataRange));
                             try (ResultSet rs = selectPS.executeQuery()) {
@@ -587,7 +589,7 @@ public class DBLoadTest {
                             stats[0] = stats[0] + (System.currentTimeMillis() - time);
                             stats[1] = stats[1] + 1;
                         }
-                        else if (t <= 7) {
+                        else if (t >= 15 & t <= 19) {
                             long time = System.currentTimeMillis();
                             insertPS.setLong(1, getNextVal());
                             insertPS.setInt(2, randomInteger(1, SMALL_TABLE_NUMROWS));
