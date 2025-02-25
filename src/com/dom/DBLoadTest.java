@@ -5,15 +5,14 @@ import oracle.jdbc.pool.OracleDataSource;
 import org.apache.commons.cli.*;
 import org.postgresql.ds.PGSimpleDataSource;
 
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.*;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.*;
 import java.util.Date;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,20 +23,6 @@ import java.util.logging.LogManager;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.LongStream;
-
-/*
- * Copyright 2020 Dominic Giles. All rights reserved.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 import static java.util.logging.Level.FINE;
 
@@ -47,121 +32,6 @@ public class DBLoadTest {
     private static final String TABLE_NAME = "just_a_table";
     private static final String SMALL_TABLE_NAME = "just_a_small_table";
     private static final int SMALL_TABLE_NUMROWS = 20000;
-
-    private enum CommandLineOptions {
-        USERNAME,
-        PASSWORD,
-        CONNECT_STRING,
-        ROWS_TO_INSERT,
-        COMMIT_FREQUENCY,
-        BATCH_SIZE,
-        THREAD_COUNT,
-        ASYNC,
-        TEST_TYPE,
-        TARGET_TYPE,
-        BENCHMARK_TYPE,
-        SELECT_COMMAND,
-        OPERATIONS_TO_PERFORM,
-        DATA_RANGE,
-        OUTPUT_RESULTS,
-        ORA_CREDENTIALS_FILE
-    }
-
-    private enum OutputDestination {
-        CSV, STDOUT;
-
-        public static OutputDestination parseCLOption(String value) {
-            switch (value) {
-                case "csv":
-                    return CSV;
-                case "stdout":
-                    return STDOUT;
-                default:
-                    throw new RuntimeException("Unrecognised output destination");
-            }
-        }
-    }
-
-    private enum TransactionType {
-        RELATIONAL, DOCUMENT;
-
-        public static TransactionType getValue(String value) {
-            return valueOf(value.toUpperCase());
-        }
-    }
-
-    private enum DBType {
-        ORACLE, POSTGRESQL, MYSQL;
-    }
-
-    private enum BenchmarkTask {
-        CREATE_TABLES, CREATE_INDEXS, DROP_INDEXES, DROP_TABLES, INSERT, UPDATE, SELECT, MIXED, FULL_WORKLOAD, TABLE_SIZE, CREATE_ALL, SINGLE_SELECT;
-
-        public static BenchmarkTask parseCLOption(String value) {
-            switch (value) {
-                case "i":
-                    return INSERT;
-                case "c":
-                    return UPDATE;
-                case "s":
-                    return SELECT;
-                case "m":
-                    return MIXED;
-                case "ct":
-                    return CREATE_TABLES;
-                case "ci":
-                    return CREATE_INDEXS;
-                case "ca":
-                    return CREATE_ALL;
-                case "di":
-                    return DROP_INDEXES;
-                case "d":
-                    return DROP_TABLES;
-                case "full":
-                    return FULL_WORKLOAD;
-                case "ts":
-                    return TABLE_SIZE;
-                case "sql":
-                    return SINGLE_SELECT;
-                default:
-                    throw new RuntimeException("Unrecognised command line option");
-            }
-        }
-    }
-
-    private enum BenchmarkQuery {
-        SIMPLE_LOOKUP(String.format("select column9 from %s where column1 = ?", TABLE_NAME)),
-        SIMPLE_RANGE_SCAN(String.format("select column9 from %s where column7 between ? and ?", TABLE_NAME)),
-        SIMPLE_COUNT(String.format("select count(*) from %s where column7 between ? and ?", TABLE_NAME)),
-        SIMPLE_JOIN(String.format("select count(*) from %s t1, %s t2 where t2.small_column1 = ? and t1.column2 = t2.small_column1", TABLE_NAME, SMALL_TABLE_NAME));
-
-        private final String sql;
-
-        BenchmarkQuery(String sql) {
-            this.sql = sql;
-        }
-
-        public String getSql() {
-            return sql;
-        }
-
-        public static BenchmarkQuery parseCLOption(String sql) {
-            switch (sql) {
-                case "lookup":
-                    return SIMPLE_LOOKUP;
-                case "range_scan":
-                    return SIMPLE_RANGE_SCAN;
-                case "count":
-                    return SIMPLE_COUNT;
-                case "simple_join":
-                    return SIMPLE_JOIN;
-                default:
-                    throw new RuntimeException("Unrecognised sql operation option");
-            }
-        }
-    }
-
-
     private static final String DROP_TABLE = String.format("DROP TABLE %s", TABLE_NAME);
     private static final String DROP_SMALL_TABLE = String.format("DROP TABLE %s", SMALL_TABLE_NAME);
     private static final String VACUUM_TABLE = String.format("VACUUM ANALYZE %s", TABLE_NAME);
@@ -180,7 +50,6 @@ public class DBLoadTest {
             "COLUMN12\t\tchar(1)\t        NOT NULL,\n" +
             "COLUMN13\t\tchar(10)\t       NOT NULL\n" +
             ")", TABLE_NAME);
-
     private static final String CREATE_SMALL_TABLE = String.format("CREATE TABLE %s (\n" +
             "SMALL_COLUMN1\t\tsmallint \t    NOT NULL,\n" +
             "SMALL_COLUMN2\t\tnumeric(20) \t    NOT NULL,\n" +
@@ -188,7 +57,6 @@ public class DBLoadTest {
             "SMALL_COLUMN4\t\tvarchar(100)\t    NOT NULL,\n" +
             "SMALL_COLUMN5\t\tchar(10)\t        NOT NULL\n" +
             ")", SMALL_TABLE_NAME);
-
     private static final String INSERT_STATEMENT = String.format("insert into %s(column1,column2,column3,column4,column5,column6,column7,column8,column9,column10,column11,column12,column13) values (?,?,?,?,?,?,?,?,?,?,?,?,?)", TABLE_NAME);
     private static final String SMALL_INSERT_STATEMENT = String.format("insert into %s(small_column1,small_column2,small_column3,small_column4,small_column5) values (?,?,?,?,?)", SMALL_TABLE_NAME);
     private static final String UPDATE_STATEMENT = String.format("update %s set COLUMN4 = ?, COLUMN10 = ? where COLUMN1 = ?", TABLE_NAME);
@@ -199,16 +67,13 @@ public class DBLoadTest {
     private static final String CREATE_FLOAT_INDEX = String.format("CREATE INDEX COL4_IDX ON %s(COLUMN4)", TABLE_NAME);
     //    private static final String CREATE_VARCHAR_INDEX = String.format("CREATE INDEX COL10_IDX ON %s(COLUMN10)", TABLE_NAME);
     private static final String CREATE_VARCHAR_INDEX = String.format("CREATE INDEX COL2_IDX ON %s(COLUMN2)", TABLE_NAME);
-
     private static final String DROP_PK_IDX = String.format("ALTER TABLE %s drop constraint col1_pk", TABLE_NAME);
     private static final String DROP_MYSQL_PK_IDX = String.format("ALTER TABLE %s DROP PRIMARY KEY", TABLE_NAME);
-
     private static final String DROP_DATE_IDX = "DROP INDEX COL7_IDX";
     private static final String DROP_FLOAT_IDX = "DROP INDEX COL4_IDX";
     private static final String DROP_VARCHAR_IDX = "DROP INDEX COL10_IDX";
     private static final String NON_ORACLE_LIMIT = " limit 30";
     private static final String ORACLE_LIMIT = " fetch next 30 rows only";
-
     private static final String PG_TABLE_SIZE_SQL = String.format("SELECT\n" +
             "  table_schema,\n" +
             "  TABLE_NAME,\n" +
@@ -236,7 +101,6 @@ public class DBLoadTest {
             "            ) a\n" +
             "     ) a\n" +
             "LIMIT 30;", TABLE_NAME);
-
     private static final String ORA_TABLE_SIZE_SQL = String.format("WITH details AS (SELECT\n" +
             "                   SYS_CONTEXT('USERENV', 'SESSION_USER') AS table_schema,\n" +
             "                   table_name,\n" +
@@ -264,9 +128,8 @@ public class DBLoadTest {
             "  index_size.unformatted_size as index_size,\n" +
             "  table_size.unformatted_size + index_size.unformatted_size AS total_size\n" +
             "FROM details, table_size, index_size\n", TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase());
-
-
     private static Long maxId = -1L;
+    private static ReentrantLock lock = new ReentrantLock();
 
     private static String convertMilliseconds(long millis) {
         long hours = TimeUnit.MILLISECONDS.toHours(millis);
@@ -579,7 +442,7 @@ public class DBLoadTest {
                     // Transaction Boundary
                     // Every transaction does 20 DML operation
                     for (int z = 0; z < NUMBER_OF_DML; z++) {
-                        int t = r.nextInt(NUMBER_OF_DML+1);
+                        int t = r.nextInt(NUMBER_OF_DML + 1);
                         if (t <= 14) {
                             long time = System.currentTimeMillis();
                             selectPS.setLong(1, randomLong(1, dataRange));
@@ -588,8 +451,7 @@ public class DBLoadTest {
                             }
                             stats[0] = stats[0] + (System.currentTimeMillis() - time);
                             stats[1] = stats[1] + 1;
-                        }
-                        else if (t >= 15 & t <= 19) {
+                        } else if (t >= 15 & t <= 19) {
                             long time = System.currentTimeMillis();
                             insertPS.setLong(1, getNextVal());
                             insertPS.setInt(2, randomInteger(1, SMALL_TABLE_NUMROWS));
@@ -607,8 +469,7 @@ public class DBLoadTest {
                             insertPS.executeUpdate();
                             stats[2] = stats[2] + (System.currentTimeMillis() - time);
                             stats[3] = stats[3] + 1;
-                        }
-                        else {
+                        } else {
                             long time = System.currentTimeMillis();
                             updatePS.setDouble(1, randomInteger(1, 1000000000) + 0.1);
                             updatePS.setString(2, String.format("%" + randomInteger(1, 48) + "s", " ").replace(' ', '*'));
@@ -630,7 +491,6 @@ public class DBLoadTest {
         }
         return stats;
     }
-
 
     private static void doInserts(Connection connection, Long rowsToInsert, Long batchsize, Long commitFrequency) throws RuntimeException, Error {
         try {
@@ -692,9 +552,6 @@ public class DBLoadTest {
         return (val == 0) ? 0 : val + 1;
     }
 
-
-    private static ReentrantLock lock = new ReentrantLock();
-
     /**
      * Generate a unique sequence. This code needs to be better parallised to support multiple threads.
      * There is a suspicion that this is a bottleneck. A version returning a range would be a better implementation.
@@ -731,7 +588,6 @@ public class DBLoadTest {
         }
         return val;
     }
-
 
     private static void doUpdates(Connection connection, Long operations, Long dataRange, Long batchsize, Long commitFrequency) throws RuntimeException, Error {
         try {
@@ -860,14 +716,14 @@ public class DBLoadTest {
         Long operationsPerThread = operations / threadCount;
 
         List<Callable<Long>> updateTests = new ArrayList<>();
-                for (Object[] connectionResult : connectionList) {
-                    Callable<Long> updateTask = () -> {
-                        Long start = System.currentTimeMillis();
-                        doUpdates((Connection) connectionResult[0],
-                                operationsPerThread,
-                                dataRange,
-                                (Long) pclo.get(CommandLineOptions.BATCH_SIZE),
-                                (Long) pclo.get(CommandLineOptions.COMMIT_FREQUENCY));
+        for (Object[] connectionResult : connectionList) {
+            Callable<Long> updateTask = () -> {
+                Long start = System.currentTimeMillis();
+                doUpdates((Connection) connectionResult[0],
+                        operationsPerThread,
+                        dataRange,
+                        (Long) pclo.get(CommandLineOptions.BATCH_SIZE),
+                        (Long) pclo.get(CommandLineOptions.COMMIT_FREQUENCY));
                 return System.currentTimeMillis() - start;
             };
             updateTests.add(updateTask);
@@ -882,7 +738,6 @@ public class DBLoadTest {
             }
         }).collect(Collectors.toList());
     }
-
 
     private static List<Long> selectBenchmark(Map<CommandLineOptions, Object> pclo, List<Object[]> connectionList) throws Exception {
 
@@ -991,7 +846,6 @@ public class DBLoadTest {
         table.calculateColumnWidth();
         System.out.println(table.render());
     }
-
 
     private static List<String[]> doInsertsTests(Map<CommandLineOptions, Object> pclo, Integer[] threadWorkload) throws Exception {
         List<String[]> results = new ArrayList<>();
@@ -1126,22 +980,21 @@ public class DBLoadTest {
         return results;
     }
 
-
     private static void runFullWorkload(Map<CommandLineOptions, Object> pclo) throws Exception {
         AsciiTable table = new AsciiTable();
         long start = System.currentTimeMillis();
         Connection connection = getConnection(pclo);
         OutputDestination output = (OutputDestination) pclo.get(CommandLineOptions.OUTPUT_RESULTS);
-        createTables(connection);
+//        createTables(connection);
         DBType dbType = (DBType) pclo.get(CommandLineOptions.TARGET_TYPE);
-        table.addColumns(new String[]{"Test Name", "Total Time", "Target"});
-        table.addRow(new String[]{"Create Tables", String.format("%d", System.currentTimeMillis() - start), pclo.get(CommandLineOptions.TARGET_TYPE).toString()});
-        table.calculateColumnWidth();
-        if (output == OutputDestination.STDOUT)
-            System.out.println(table.render());
-        else {
-            Files.write(Paths.get(String.format("%s_create_tables.csv", dbType.toString())), table.renderAsCSV().getBytes());
-        }
+//        table.addColumns(new String[]{"Test Name", "Total Time", "Target"});
+//        table.addRow(new String[]{"Create Tables", String.format("%d", System.currentTimeMillis() - start), pclo.get(CommandLineOptions.TARGET_TYPE).toString()});
+//        table.calculateColumnWidth();
+//        if (output == OutputDestination.STDOUT)
+//            System.out.println(table.render());
+//        else {
+//            Files.write(Paths.get(String.format("%s_create_tables.csv", dbType.toString())), table.renderAsCSV().getBytes());
+//        }
         List<String[]> results;
         maxId = getMaxId(connection);
         // Insert Data
@@ -1173,6 +1026,7 @@ public class DBLoadTest {
         table = new AsciiTable();
         table.addColumns(new String[]{"Test Name", "Operations", "Operations/sec", "Connection Time", "Total Time", "Threads", "Target", "Commits", "Batch", "Async"});
         results = doSelectTests(pclo, new Integer[]{1, 5, 10, 25, 50});
+//        results = doSelectTests(pclo, new Integer[]{1,1,1,1,1});
         for (String[] r : results)
             table.addRow(r);
         table.calculateColumnWidth();
@@ -1206,7 +1060,6 @@ public class DBLoadTest {
             Files.write(Paths.get(String.format("%s_mixed.csv", dbType.toString())), table.renderAsCSV().getBytes());
         }
     }
-
 
     public static void main(String[] args) {
         try {
@@ -1345,7 +1198,6 @@ public class DBLoadTest {
         table.calculateColumnWidth();
         System.out.println(table.render());
     }
-
 
     private static Map<CommandLineOptions, Object> parseCommandLine(String[] arguments) {
         Map<CommandLineOptions, Object> parsedOptions = new HashMap<>();
@@ -1565,7 +1417,6 @@ public class DBLoadTest {
         }
     }
 
-
     public static Date asDate(LocalDate localDate) {
         return Date.from(localDate.atStartOfDay().atZone(ZoneId.systemDefault()).toInstant());
     }
@@ -1605,6 +1456,121 @@ public class DBLoadTest {
             e.printStackTrace();
         }
 
+    }
+
+
+    private enum CommandLineOptions {
+        USERNAME,
+        PASSWORD,
+        CONNECT_STRING,
+        ROWS_TO_INSERT,
+        COMMIT_FREQUENCY,
+        BATCH_SIZE,
+        THREAD_COUNT,
+        ASYNC,
+        TEST_TYPE,
+        TARGET_TYPE,
+        BENCHMARK_TYPE,
+        SELECT_COMMAND,
+        OPERATIONS_TO_PERFORM,
+        DATA_RANGE,
+        OUTPUT_RESULTS,
+        ORA_CREDENTIALS_FILE
+    }
+
+    private enum OutputDestination {
+        CSV, STDOUT;
+
+        public static OutputDestination parseCLOption(String value) {
+            switch (value) {
+                case "csv":
+                    return CSV;
+                case "stdout":
+                    return STDOUT;
+                default:
+                    throw new RuntimeException("Unrecognised output destination");
+            }
+        }
+    }
+
+    private enum TransactionType {
+        RELATIONAL, DOCUMENT;
+
+        public static TransactionType getValue(String value) {
+            return valueOf(value.toUpperCase());
+        }
+    }
+
+    private enum DBType {
+        ORACLE, POSTGRESQL, MYSQL;
+    }
+
+
+    private enum BenchmarkTask {
+        CREATE_TABLES, CREATE_INDEXS, DROP_INDEXES, DROP_TABLES, INSERT, UPDATE, SELECT, MIXED, FULL_WORKLOAD, TABLE_SIZE, CREATE_ALL, SINGLE_SELECT;
+
+        public static BenchmarkTask parseCLOption(String value) {
+            switch (value) {
+                case "i":
+                    return INSERT;
+                case "c":
+                    return UPDATE;
+                case "s":
+                    return SELECT;
+                case "m":
+                    return MIXED;
+                case "ct":
+                    return CREATE_TABLES;
+                case "ci":
+                    return CREATE_INDEXS;
+                case "ca":
+                    return CREATE_ALL;
+                case "di":
+                    return DROP_INDEXES;
+                case "d":
+                    return DROP_TABLES;
+                case "full":
+                    return FULL_WORKLOAD;
+                case "ts":
+                    return TABLE_SIZE;
+                case "sql":
+                    return SINGLE_SELECT;
+                default:
+                    throw new RuntimeException("Unrecognised command line option");
+            }
+        }
+    }
+
+    private enum BenchmarkQuery {
+        SIMPLE_LOOKUP(String.format("select column9 from %s where column1 = ?", TABLE_NAME)),
+        SIMPLE_RANGE_SCAN(String.format("select column9 from %s where column7 between ? and ?", TABLE_NAME)),
+        SIMPLE_COUNT(String.format("select count(*) from %s where column7 between ? and ?", TABLE_NAME)),
+        SIMPLE_JOIN(String.format("select count(*) from %s t1, %s t2 where t2.small_column1 = ? and t1.column2 = t2.small_column1", TABLE_NAME, SMALL_TABLE_NAME));
+
+        private final String sql;
+
+        BenchmarkQuery(String sql) {
+            this.sql = sql;
+        }
+
+        public static BenchmarkQuery parseCLOption(String sql) {
+            switch (sql) {
+                case "lookup":
+                    return SIMPLE_LOOKUP;
+                case "range_scan":
+                    return SIMPLE_RANGE_SCAN;
+                case "count":
+                    return SIMPLE_COUNT;
+                case "simple_join":
+                    return SIMPLE_JOIN;
+                default:
+                    throw new RuntimeException("Unrecognised sql operation option");
+            }
+        }
+
+        public String getSql() {
+            return sql;
+        }
     }
 }
 
