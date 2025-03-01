@@ -151,7 +151,7 @@ public class DBLoadTest {
             FROM details, table_size, index_size
             """, TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase());
     private static Long maxId = -1L;
-    private static ReentrantLock lock = new ReentrantLock();
+    private static final ReentrantLock lock = new ReentrantLock();
 
     private static String convertMilliseconds(long millis) {
         long hours = TimeUnit.MILLISECONDS.toHours(millis);
@@ -193,7 +193,7 @@ public class DBLoadTest {
             Connection connection = pds.getConnection();
             connection.setAutoCommit(false);
             if (doAsync) {
-                connection.createStatement().execute("SET synchronous_commit = off");
+                connection.createStatement().execute("ALTER SYSTEM SET synchronous_commit = OFF");
             }
             return connection;
         } catch (SQLException e) {
@@ -218,7 +218,7 @@ public class DBLoadTest {
     }
 
     private static void createTables(Connection connection) throws RuntimeException {
-        try (Statement st = connection.createStatement();) {
+        try (Statement st = connection.createStatement()) {
             dropTables(connection);
             connection.commit();
             st.execute(CREATE_TABLE);
@@ -259,14 +259,14 @@ public class DBLoadTest {
      */
     private static void dropTables(Connection connection) throws RuntimeException {
         try {
-            try (Statement st = connection.createStatement();) {
+            try (Statement st = connection.createStatement()) {
                 st.execute(DROP_TABLE);
                 logger.fine(String.format("Table \"%s\" dropped", TABLE_NAME));
             } catch (SQLException e) {
                 logger.log(FINE, String.format("Table \"%s\" hasn't been created yet", TABLE_NAME));
             }
             connection.commit();
-            try (Statement st = connection.createStatement();) {
+            try (Statement st = connection.createStatement()) {
                 st.execute(DROP_SMALL_TABLE);
                 logger.fine(String.format("Table \"%s\" dropped", SMALL_TABLE_NAME));
             } catch (SQLException e) {
@@ -275,11 +275,11 @@ public class DBLoadTest {
             connection.commit();
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
-    private static void insertBigTableData(Map<CommandLineOptions, Object> pclo) {
+    private static void insertBigTableData(Map<CommandLineOptions, Object> pclo) throws RuntimeException {
         long startMillis = System.currentTimeMillis();
         try {
             int threadCount = (Integer) pclo.get(CommandLineOptions.THREAD_COUNT);
@@ -291,14 +291,12 @@ public class DBLoadTest {
             logger.fine(String.format("Connected %d threads, Average connect time = %f, Total Real Time to Connect = %d", threadCount, avgConnectTime.orElse(0), connectionTime));
             maxId = getMaxId((Connection) connectResults.get(0)[0]);
             startMillis = System.currentTimeMillis();
-            long opTime = 0;
-            String taskDescription = "";
             logger.fine(String.format("Asking all %d threads to insert %d rows each into the table %s", threadCount, rowsToInsertPerThread, TABLE_NAME));
             List<Long> benchmarkResults = insertBenchmark(pclo, connectResults);
             renderResults("Ingest via DML", connectionTime, rowsToInsert, System.currentTimeMillis() - startMillis, pclo);
             OptionalDouble avgUpdateTime = benchmarkResults.stream().mapToLong(r -> r).average();
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
@@ -326,7 +324,7 @@ public class DBLoadTest {
             }
             ps.executeBatch();
             connection.commit();
-            try (Statement st = connection.createStatement();) {
+            try (Statement st = connection.createStatement()) {
                 st.execute(CREATE_SMALL_PK_INDEX);
                 connection.commit();
             }
@@ -340,7 +338,7 @@ public class DBLoadTest {
     }
 
     private static void createIndexes(Connection connection, Map<CommandLineOptions, Object> pclo) throws SQLException {
-        try (Statement st = connection.createStatement();) {
+        try (Statement st = connection.createStatement()) {
 
             try {
                 st.execute(CREATE_PK_INDEX);
@@ -351,7 +349,7 @@ public class DBLoadTest {
                 if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.POSTGRESQL)
                     vacuumAndAnalyze(connection);
 //                connection.commit();
-                logger.fine(String.format("Created indexes", TABLE_NAME));
+                logger.fine(String.format("Created indexes on %s", TABLE_NAME));
             } catch (SQLException e) {
                 logger.log(FINE, "SQL Exception Thrown in createIndexes()", e);
                 throw new RuntimeException(e);
@@ -360,7 +358,7 @@ public class DBLoadTest {
     }
 
     private static void dropIndexes(Connection connection, Map<CommandLineOptions, Object> pclo) throws SQLException {
-        try (Statement st = connection.createStatement();) {
+        try (Statement st = connection.createStatement()) {
             try {
                 String additionalDropClause = "";
                 if (pclo.get(CommandLineOptions.TARGET_TYPE) == DBType.MYSQL) {
@@ -372,7 +370,7 @@ public class DBLoadTest {
                 st.execute(DROP_FLOAT_IDX + additionalDropClause);
                 st.execute(DROP_DATE_IDX + additionalDropClause);
                 st.execute(DROP_VARCHAR_IDX + additionalDropClause);
-                logger.fine(String.format("Indexes Dropped", TABLE_NAME));
+                logger.fine(String.format("Indexes Dropped on %s", TABLE_NAME));
                 connection.commit();
             } catch (SQLException e) {
                 logger.log(FINE, "SQL Exception Thrown in dropIndexes()", e);
@@ -382,7 +380,7 @@ public class DBLoadTest {
     }
 
     private static void vacuumAndAnalyze(Connection connection) throws SQLException {
-        try (Statement st = connection.createStatement();) {
+        try (Statement st = connection.createStatement()) {
             try {
                 connection.setAutoCommit(true);
                 st.execute(VACUUM_TABLE);
@@ -453,7 +451,7 @@ public class DBLoadTest {
         try {
             try (PreparedStatement selectPS = (connection.prepareStatement(BenchmarkQuery.SIMPLE_LOOKUP.getSql()));
                  PreparedStatement insertPS = connection.prepareStatement(INSERT_STATEMENT);
-                 PreparedStatement updatePS = connection.prepareStatement(UPDATE_STATEMENT);
+                 PreparedStatement updatePS = connection.prepareStatement(UPDATE_STATEMENT)
             ) {
                 LocalDate tenYearsAgo = LocalDate.now().minusYears(10);
                 // Seed Random so transactions counts are always same
@@ -675,7 +673,7 @@ public class DBLoadTest {
         List<Callable<Object[]>> connectTests = new ArrayList<>();
         for (int i = 0; i < (Integer) pclo.get(CommandLineOptions.THREAD_COUNT); i++) {
             Callable<Object[]> connectTask = () -> {
-                Long start = System.currentTimeMillis();
+                long start = System.currentTimeMillis();
                 return new Object[]{getConnection(pclo), System.currentTimeMillis() - start, 0};
             };
             connectTests.add(connectTask);
@@ -710,7 +708,7 @@ public class DBLoadTest {
         List<Callable<Long>> insertTests = new ArrayList<>();
         for (Object[] connectionResult : connectionList) {
             Callable<Long> insertTask = () -> {
-                Long start = System.currentTimeMillis();
+                long start = System.currentTimeMillis();
                 doInserts((Connection) connectionResult[0],
                         rowsToInsertPerThread,
                         (Long) pclo.get(CommandLineOptions.BATCH_SIZE),
