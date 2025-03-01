@@ -30,33 +30,52 @@ public class DBLoadTest {
 
     private static final Logger logger = Logger.getLogger(DBLoadTest.class.getName());
     private static final String TABLE_NAME = "just_a_table";
+    private static final String MEDIUM_TABLE_NAME = "just_a_medium_table";
     private static final String SMALL_TABLE_NAME = "just_a_small_table";
+    private static final int MEDIUM_TABLE_NUMROWS = 200000;
     private static final int SMALL_TABLE_NUMROWS = 20000;
     private static final String DROP_TABLE = String.format("DROP TABLE %s", TABLE_NAME);
+    private static final String DROP_MEDIUM_TABLE = String.format("DROP TABLE %s", MEDIUM_TABLE_NAME);
     private static final String DROP_SMALL_TABLE = String.format("DROP TABLE %s", SMALL_TABLE_NAME);
     private static final String VACUUM_TABLE = String.format("VACUUM ANALYZE %s", TABLE_NAME);
-    private static final String CREATE_TABLE = String.format("CREATE TABLE %s (\n" +
-            "COLUMN1\t\tnumeric(20) \t    NOT NULL,\n" +
-            "COLUMN2\t\tsmallint\t        NOT NULL,\n" +
-            "COLUMN3\t\tinteger \t        NOT NULL,\n" +
-            "COLUMN4\t\tdecimal\t         NOT NULL,\n" +
-            "COLUMN5\t\treal \t           NOT NULL,\n" +
-            "COLUMN6\t\tdouble precision  NOT NULL,\n" +
-            "COLUMN7\t\tDATE\t            NOT NULL,\n" +
-            "COLUMN8\t\ttimestamp\t       NOT NULL,\n" +
-            "COLUMN9\t\tvarchar(10)\t     NOT NULL,\n" +
-            "COLUMN10\t\tvarchar(50)\t    NOT NULL,\n" +
-            "COLUMN11\t\tvarchar(100)\t   NOT NULL,\n" +
-            "COLUMN12\t\tchar(1)\t        NOT NULL,\n" +
-            "COLUMN13\t\tchar(10)\t       NOT NULL\n" +
-            ")", TABLE_NAME);
-    private static final String CREATE_SMALL_TABLE = String.format("CREATE TABLE %s (\n" +
-            "SMALL_COLUMN1\t\tsmallint \t    NOT NULL,\n" +
-            "SMALL_COLUMN2\t\tnumeric(20) \t    NOT NULL,\n" +
-            "SMALL_COLUMN3\t\tDATE\t            NOT NULL,\n" +
-            "SMALL_COLUMN4\t\tvarchar(100)\t    NOT NULL,\n" +
-            "SMALL_COLUMN5\t\tchar(10)\t        NOT NULL\n" +
-            ")", SMALL_TABLE_NAME);
+    private static final String CREATE_TABLE = String.format("""
+            CREATE TABLE %s (
+            COLUMN1        numeric(20)            NOT NULL,
+            COLUMN2        smallint               NOT NULL,
+            COLUMN3        integer                NOT NULL,
+            COLUMN4        decimal                NOT NULL,
+            COLUMN5        real                   NOT NULL,
+            COLUMN6        double precision       NOT NULL,
+            COLUMN7        DATE                   NOT NULL,
+            COLUMN8        timestamp              NOT NULL,
+            COLUMN9        varchar(10)            NOT NULL,
+            COLUMN10        varchar(50)           NOT NULL,
+            COLUMN11        varchar(100)          NOT NULL,
+            COLUMN12        char(1)               NOT NULL,
+            COLUMN13        char(10)              NOT NULL
+            )""", TABLE_NAME);
+    private static final String CREATE_MEDIUM_TABLE = String.format("""
+            CREATE TABLE %s (
+            COLUMN1        numeric(20)            NOT NULL,
+            COLUMN2        smallint               NOT NULL,
+            COLUMN3        integer                NOT NULL,
+            COLUMN4        decimal                NOT NULL,
+            COLUMN5        real                   NOT NULL,
+            COLUMN6        double precision       NOT NULL,
+            COLUMN7        DATE                   NOT NULL,
+            COLUMN8        timestamp              NOT NULL,
+            COLUMN11        varchar(100)          NOT NULL,
+            COLUMN12        char(1)               NOT NULL,
+            COLUMN13        char(10)              NOT NULL
+            )""", MEDIUM_TABLE_NAME);
+    private static final String CREATE_SMALL_TABLE = String.format("""
+            CREATE TABLE %s (
+            SMALL_COLUMN1        smallint            NOT NULL,
+            SMALL_COLUMN2        numeric(20)            NOT NULL,
+            SMALL_COLUMN3        DATE                   NOT NULL,
+            SMALL_COLUMN4        varchar(100)           NOT NULL,
+            SMALL_COLUMN5        char(10)               NOT NULL
+            )""", SMALL_TABLE_NAME);
     private static final String INSERT_STATEMENT = String.format("insert into %s(column1,column2,column3,column4,column5,column6,column7,column8,column9,column10,column11,column12,column13) values (?,?,?,?,?,?,?,?,?,?,?,?,?)", TABLE_NAME);
     private static final String SMALL_INSERT_STATEMENT = String.format("insert into %s(small_column1,small_column2,small_column3,small_column4,small_column5) values (?,?,?,?,?)", SMALL_TABLE_NAME);
     private static final String UPDATE_STATEMENT = String.format("update %s set COLUMN4 = ?, COLUMN10 = ? where COLUMN1 = ?", TABLE_NAME);
@@ -74,60 +93,63 @@ public class DBLoadTest {
     private static final String DROP_VARCHAR_IDX = "DROP INDEX COL10_IDX";
     private static final String NON_ORACLE_LIMIT = " limit 30";
     private static final String ORACLE_LIMIT = " fetch next 30 rows only";
-    private static final String PG_TABLE_SIZE_SQL = String.format("SELECT\n" +
-            "  table_schema,\n" +
-            "  TABLE_NAME,\n" +
-            "  row_estimate,\n" +
-            "  pg_size_pretty(table_bytes) AS TABLE,\n" +
-            "  pg_size_pretty(index_bytes) AS INDEX,\n" +
-            "  pg_size_pretty(total_bytes) AS total\n" +
-            "FROM (\n" +
-            "       SELECT\n" +
-            "         *,\n" +
-            "         total_bytes - index_bytes - COALESCE(toast_bytes, 0) AS table_bytes\n" +
-            "       FROM (\n" +
-            "              SELECT\n" +
-            "                c.oid,\n" +
-            "                nspname                               AS table_schema,\n" +
-            "                relname                               AS TABLE_NAME,\n" +
-            "                c.reltuples                           AS row_estimate,\n" +
-            "                pg_total_relation_size(c.oid)         AS total_bytes,\n" +
-            "                pg_indexes_size(c.oid)                AS index_bytes,\n" +
-            "                pg_total_relation_size(reltoastrelid) AS toast_bytes\n" +
-            "              FROM pg_class c\n" +
-            "                LEFT JOIN pg_namespace n ON n.oid = c.relnamespace\n" +
-            "              WHERE relkind = 'r'\n" +
-            "                    AND relname = '%s'\n" +
-            "            ) a\n" +
-            "     ) a\n" +
-            "LIMIT 30;", TABLE_NAME);
-    private static final String ORA_TABLE_SIZE_SQL = String.format("WITH details AS (SELECT\n" +
-            "                   SYS_CONTEXT('USERENV', 'SESSION_USER') AS table_schema,\n" +
-            "                   table_name,\n" +
-            "                   num_rows                                  row_estimate\n" +
-            "                 FROM user_tables\n" +
-            "                 WHERE table_name = '%s'),\n" +
-            "    table_size AS (SELECT\n" +
-            "                     s.segment_name AS table_name,\n" +
-            "                     SUM(s.bytes)      unformatted_size\n" +
-            "                   FROM user_segments s\n" +
-            "                   WHERE s.segment_name = '%s'\n" +
-            "                   GROUP BY s.segment_name),\n" +
-            "    index_size AS ( SELECT\n" +
-            "                      '%s' table_name,\n" +
-            "                      SUM(s.bytes)   unformatted_size\n" +
-            "                    FROM user_segments s\n" +
-            "                    WHERE s.segment_name IN (SELECT i.index_name\n" +
-            "                                             FROM user_indexes i\n" +
-            "                                             WHERE i.table_name = '%s'))\n" +
-            "SELECT\n" +
-            "  details.table_schema,\n" +
-            "  details.table_name,\n" +
-            "  details.row_estimate,\n" +
-            "  table_size.unformatted_size as table_size,\n" +
-            "  index_size.unformatted_size as index_size,\n" +
-            "  table_size.unformatted_size + index_size.unformatted_size AS total_size\n" +
-            "FROM details, table_size, index_size\n", TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase());
+    private static final String PG_TABLE_SIZE_SQL = String.format("""
+            SELECT
+              table_schema,
+              TABLE_NAME,
+              row_estimate,
+              pg_size_pretty(table_bytes) AS TABLE,
+              pg_size_pretty(index_bytes) AS INDEX,
+              pg_size_pretty(total_bytes) AS total
+            FROM (
+                   SELECT
+                     *,
+                     total_bytes - index_bytes - COALESCE(toast_bytes, 0) AS table_bytes
+                   FROM (
+                          SELECT
+                            c.oid,
+                            nspname                               AS table_schema,
+                            relname                               AS TABLE_NAME,
+                            c.reltuples                           AS row_estimate,
+                            pg_total_relation_size(c.oid)         AS total_bytes,
+                            pg_indexes_size(c.oid)                AS index_bytes,
+                            pg_total_relation_size(reltoastrelid) AS toast_bytes
+                          FROM pg_class c
+                            LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+                          WHERE relkind = 'r'
+                                AND relname = '%s'
+                        ) a
+                 ) a
+            LIMIT 30;""", TABLE_NAME);
+    private static final String ORA_TABLE_SIZE_SQL = String.format("""
+            WITH details AS (SELECT
+                               SYS_CONTEXT('USERENV', 'SESSION_USER') AS table_schema,
+                               table_name,
+                               num_rows                                  row_estimate
+                             FROM user_tables
+                             WHERE table_name = '%s'),
+                table_size AS (SELECT
+                                 s.segment_name AS table_name,
+                                 SUM(s.bytes)      unformatted_size
+                               FROM user_segments s
+                               WHERE s.segment_name = '%s'
+                               GROUP BY s.segment_name),
+                index_size AS ( SELECT
+                                  '%s' table_name,
+                                  SUM(s.bytes)   unformatted_size
+                                FROM user_segments s
+                                WHERE s.segment_name IN (SELECT i.index_name
+                                                         FROM user_indexes i
+                                                         WHERE i.table_name = '%s'))
+            SELECT
+              details.table_schema,
+              details.table_name,
+              details.row_estimate,
+              table_size.unformatted_size as table_size,
+              index_size.unformatted_size as index_size,
+              table_size.unformatted_size + index_size.unformatted_size AS total_size
+            FROM details, table_size, index_size
+            """, TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase(), TABLE_NAME.toUpperCase());
     private static Long maxId = -1L;
     private static ReentrantLock lock = new ReentrantLock();
 
